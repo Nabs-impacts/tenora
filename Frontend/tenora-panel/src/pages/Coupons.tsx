@@ -1,13 +1,3 @@
-/**
- * Page Coupons — admin
- *
- * UX volontairement compact-mobile-first :
- *  - liste sous forme de cartes (pas de table) → ne déborde pas en 320px
- *  - création/édition via Sheet bottom sur mobile (Dialog sur desktop)
- *  - 1 seule requête `/panel/coupons` au mount (cache 60s)
- *  - mutations → invalidation ciblée (pas de refetch global)
- *  - liste produits/catégories partagée avec les autres pages (cache global)
- */
 import { useMemo, useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Plus, Pencil, Trash2, Copy, Tag, Search, X } from "lucide-react";
@@ -183,7 +173,7 @@ export default function CouponsPage() {
       <DataCard className="brackets">
         <DataCardHeader>
           <div className="flex flex-col sm:flex-row sm:items-center gap-3 w-full">
-            <div className="flex items-center gap-2 mono text-xs">
+            <div className="flex items-center gap-2 mono text-xs sm:text-sm">
               <Tag className="h-4 w-4 text-primary" />
               <span className="text-muted-foreground">TOTAL:</span>
               <span className="text-foreground font-bold">{couponsQ.data?.length ?? 0}</span>
@@ -197,7 +187,7 @@ export default function CouponsPage() {
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
                 placeholder="TENORA-..."
-                className="rounded-none border-2 mono pl-9 h-10"
+                className="rounded-none border-2 mono pl-9 h-11 text-sm"
               />
             </div>
           </div>
@@ -213,58 +203,75 @@ export default function CouponsPage() {
               Aucun coupon. Cliquez sur « Nouveau ».
             </div>
           ) : (
-            <ul className="grid grid-cols-1 lg:grid-cols-2 gap-3">
+            <ul className="grid grid-cols-1 lg:grid-cols-2 gap-3 sm:gap-4">
               {filtered.map((c) => {
                 const expired = c.expires_at && new Date(c.expires_at) < new Date();
                 const exhausted = c.max_uses != null && c.times_used >= c.max_uses;
                 const dead = !c.is_active || expired || exhausted;
+                const discount = c.discount_percent != null
+                  ? `−${c.discount_percent}%`
+                  : `−${c.discount_amount} XOF`;
                 return (
                   <li
                     key={c.id}
-                    className={`brut-card p-3 sm:p-4 transition-colors ${dead ? "opacity-60" : ""}`}
+                    className={`brut-card p-4 sm:p-5 transition-colors ${dead ? "opacity-60" : ""}`}
                   >
-                    <div className="flex items-start gap-3">
+                    {/* Ligne 1 : code coupon + actions */}
+                    <div className="flex items-start gap-3 mb-3">
                       <button
                         onClick={() => copyCode(c.code)}
                         className="flex-1 min-w-0 text-left group"
                         title="Cliquer pour copier"
                       >
-                        <p className="mono font-bold text-sm sm:text-base truncate text-primary group-hover:text-primary-glow flex items-center gap-2">
-                          {c.code}
-                          <Copy className="h-3 w-3 opacity-40 group-hover:opacity-100" />
+                        <p className="mono font-bold text-base sm:text-lg break-all text-primary group-hover:text-primary-glow flex items-center gap-2 leading-tight">
+                          <span className="truncate">{c.code}</span>
+                          <Copy className="h-3.5 w-3.5 shrink-0 opacity-40 group-hover:opacity-100" />
                         </p>
-                        <p className="mono text-[11px] text-muted-foreground mt-1">
-                          {c.discount_percent != null ? `−${c.discount_percent}%` : `−${c.discount_amount} XOF`}
-                          {" · "}
-                          {c.times_used}{c.max_uses ? `/${c.max_uses}` : ""} util.
-                          {c.expires_at && (<> · exp. {format(new Date(c.expires_at), "dd/MM/yy")}</>)}
-                          {c.user_id && <> · user #{c.user_id}</>}
-                        </p>
-                        {(c.product_ids.length || c.category_ids.length) ? (
-                          <p className="mono text-[10px] text-muted-foreground mt-1 truncate">
-                            {c.product_ids.length} produit(s) · {c.category_ids.length} catégorie(s)
-                          </p>
-                        ) : (
-                          <p className="mono text-[10px] text-muted-foreground mt-1">tout le catalogue</p>
-                        )}
                       </button>
-                      <div className="flex items-center gap-1 shrink-0">
+                      <div className="flex items-center gap-1.5 shrink-0">
                         <button
                           onClick={() => openEdit(c)}
-                          className="h-9 w-9 border-2 border-border hover:border-primary flex items-center justify-center tap-target"
+                          className="h-10 w-10 border-2 border-border hover:border-primary flex items-center justify-center tap-target"
                           aria-label="Éditer"
                         >
-                          <Pencil className="h-3.5 w-3.5" />
+                          <Pencil className="h-4 w-4" />
                         </button>
                         <button
                           onClick={() => setDelTarget(c)}
-                          className="h-9 w-9 border-2 border-border hover:border-destructive hover:text-destructive flex items-center justify-center tap-target"
+                          className="h-10 w-10 border-2 border-border hover:border-destructive hover:text-destructive flex items-center justify-center tap-target"
                           aria-label="Supprimer"
                         >
-                          <Trash2 className="h-3.5 w-3.5" />
+                          <Trash2 className="h-4 w-4" />
                         </button>
                       </div>
                     </div>
+
+                    {/* Ligne 2 : chips d'infos lisibles */}
+                    <div className="flex flex-wrap gap-1.5 mb-2">
+                      <span className="mono text-xs font-bold px-2 py-1 border-2 border-primary text-primary">
+                        {discount}
+                      </span>
+                      <span className="mono text-xs px-2 py-1 border-2 border-border text-foreground">
+                        {c.times_used}{c.max_uses ? `/${c.max_uses}` : ""} util.
+                      </span>
+                      {c.expires_at && (
+                        <span className={`mono text-xs px-2 py-1 border-2 ${expired ? "border-destructive text-destructive" : "border-border text-muted-foreground"}`}>
+                          exp. {format(new Date(c.expires_at), "dd/MM/yy")}
+                        </span>
+                      )}
+                      {c.user_id && (
+                        <span className="mono text-xs px-2 py-1 border-2 border-border text-muted-foreground">
+                          user #{c.user_id}
+                        </span>
+                      )}
+                    </div>
+
+                    {/* Ligne 3 : portée */}
+                    <p className="mono text-xs text-muted-foreground">
+                      {(c.product_ids.length || c.category_ids.length)
+                        ? `${c.product_ids.length} produit(s) · ${c.category_ids.length} catégorie(s)`
+                        : "tout le catalogue"}
+                    </p>
                   </li>
                 );
               })}

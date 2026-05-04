@@ -1,24 +1,20 @@
 /**
- * Topbar — refonte mobile.
- *
- * Avant : burger + brand + horloge + email + avatar + logout sur 56px → trop
- * dense, nombreux mis-clics, surtout sur 360-375px.
- *
- * Après (mobile) : juste brand TENORA centré + avatar/initiale qui ouvre un
- * petit menu (logout). Le burger disparaît ; la navigation se fait via la
- * BottomNav. Hauteur 52px → respire mieux et libère 4px verticaux.
+ * Topbar mobile :
+ *  - Burger 3 traits à gauche → ouvre le MobileDrawer (navigation)
+ *  - Brand TENORA au centre/à côté du burger
+ *  - Avatar à droite → menu compte/déconnexion
  *
  * Desktop inchangé.
  */
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { LogOut, Zap } from "lucide-react";
+import { LogOut, Menu, Zap } from "lucide-react";
 import { useAuthStore } from "@/lib/stores/auth";
 import { toast } from "sonner";
 import { MobileDrawer } from "./MobileDrawer";
 
 interface Props {
-  /** Permet à PanelLayout de piloter l'ouverture du drawer (bouton "Plus" du bottom-nav). */
+  /** Permet à PanelLayout de piloter l'ouverture du drawer. */
   drawerOpen: boolean;
   onDrawerToggle: (open: boolean) => void;
 }
@@ -40,8 +36,16 @@ export function Topbar({ drawerOpen, onDrawerToggle }: Props) {
     <>
       <header className="sticky top-0 z-20 border-b-2 border-border bg-background/85 backdrop-blur-xl">
         <div className="flex items-center gap-2 sm:gap-3 px-3 sm:px-6 h-13 lg:h-14" style={{ height: "52px" }}>
-          {/* Mobile brand centré, sans burger (la nav est en bottom) */}
+          {/* Mobile : burger 3 traits + brand */}
           <div className="lg:hidden flex items-center gap-2 min-w-0">
+            <button
+              onClick={() => onDrawerToggle(!drawerOpen)}
+              className="h-10 w-10 border-2 border-border bg-background hover:border-primary hover:text-primary flex items-center justify-center shrink-0 tap-target transition-colors"
+              aria-label="Ouvrir le menu"
+              aria-expanded={drawerOpen}
+            >
+              <Menu className="h-5 w-5" strokeWidth={2.5} />
+            </button>
             <div className="h-8 w-8 bg-primary flex items-center justify-center shrink-0">
               <Zap className="h-4 w-4 text-primary-foreground" strokeWidth={3} />
             </div>

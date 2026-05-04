@@ -1,14 +1,11 @@
-// === Remplace PanelLayout.tsx en entier ===
-// Ajouts UX :
-//   - Bottom-nav mobile avec 4 raccourcis + bouton "Plus" → drawer
-//   - Padding bottom pour ne pas masquer le contenu sous la bottom-nav
-//   - Padding horizontal mobile réduit à 12px (vs 16) pour plus d'espace utile
+// PanelLayout
+// - Plus de bottom-nav mobile : la nav passe par le burger (Topbar) -> MobileDrawer
+// - Padding bottom mobile réduit (plus besoin de réserver la place de la bottom-nav)
 import { useEffect, useState } from "react";
 import { Navigate, Outlet, useLocation } from "react-router-dom";
 import { useAuthStore } from "@/lib/stores/auth";
 import { Sidebar } from "./Sidebar";
 import { Topbar } from "./Topbar";
-import { MobileBottomNav } from "./MobileBottomNav";
 
 export function PanelLayout() {
   const { isLoggedIn, ready, fetchMe } = useAuthStore();
@@ -37,7 +34,7 @@ export function PanelLayout() {
       <Sidebar />
       <div className="flex-1 flex flex-col min-w-0 lg:pl-64">
         <Topbar drawerOpen={drawerOpen} onDrawerToggle={setDrawerOpen} />
-        <main className="flex-1 px-3 py-4 sm:p-6 lg:p-8 pb-24 lg:pb-8 relative z-10">
+        <main className="flex-1 px-3 py-4 sm:p-6 lg:p-8 pb-8 relative z-10">
           <div className="max-w-[1500px] mx-auto">
             <Outlet />
           </div>
@@ -50,7 +47,6 @@ export function PanelLayout() {
           </span>
         </footer>
       </div>
-      <MobileBottomNav onMore={() => setDrawerOpen(true)} />
     </div>
   );
 }
