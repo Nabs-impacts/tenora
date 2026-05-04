@@ -42,11 +42,19 @@ def _etag(data: dict) -> str:
     return hashlib.md5(json.dumps(data, sort_keys=True, default=str).encode()).hexdigest()[:16]
 
 
-def _set_cache_headers(response: Response, data: dict, max_age: int = 300) -> None:
-    """Applique Cache-Control + ETag sur la réponse."""
+def _set_cache_headers(response: Response, data: dict) -> str:
+    """Applique ETag + Cache-Control no-cache sur la réponse.
+    On garde le cache serveur (dict Python) pour les perfs, mais on interdit
+    au navigateur de mettre en cache la réponse : ainsi, dès que
+    invalidate_site_cache() est appelé (toggle maintenance, etc.),
+    la prochaine requête du frontend obtient les données fraîches.
+    Avec ETag + If-None-Match, les réponses inchangées coûtent un aller-réseau
+    mais reviennent en 304 sans corps — zéro bande passante gaspillée.
+    """
     tag = _etag(data)
-    response.headers["Cache-Control"] = f"public, max-age={max_age}, stale-while-revalidate={max_age * 2}"
+    response.headers["Cache-Control"] = "private, no-cache, must-revalidate"
     response.headers["ETag"] = f'"{tag}"'
+    return tag
 
 
 # ── Helpers ──────────────────────────────────────────────────────────────────
@@ -83,23 +91,31 @@ def _base_url(request: Request) -> str:
 # ── Routes ───────────────────────────────────────────────────────────────────
 
 @router.get("/init")
-def site_init(response: Response, db: Session = Depends(get_db)):
+def site_init(request: Request, response: Response, db: Session = Depends(get_db)):
     """
     ✅ ENDPOINT UNIFIÉ — remplace :
         GET /site/settings
         GET /orders/payment-methods
     Le frontend n'a plus besoin que d'UN seul appel au démarrage.
-    Résultat mis en cache 5 min (serveur) + Cache-Control 5 min (navigateur).
-    Le navigateur renvoie If-None-Match → 304 Not Modified au lieu du payload complet.
+    Cache serveur (dict Python) 5 min pour éviter les hits DB répétés.
+    Cache navigateur DÉSACTIVÉ (no-cache) : ainsi, dès que le mode
+    maintenance change, la prochaine requête obtient les données fraîches
+    sans attendre l'expiration du cache HTTP.
+    Supporte If-None-Match → 304 Not Modified pour économiser la bande passante.
     """
     cached = _cache_get("site_init")
     if cached is not None:
-        _set_cache_headers(response, cached)
-        return cached
+        data = cached
+    else:
+        data = _build_site_data(db)
+        _cache_set("site_init", data)
 
-    data = _build_site_data(db)
-    _cache_set("site_init", data)
-    _set_cache_headers(response, data)
+    tag = _set_cache_headers(response, data)
+
+    # 304 Not Modified si le client a déjà cette version exacte
+    if request.headers.get("if-none-match") == f'"{tag}"':
+        return Response(status_code=304)
+
     return data
 
 

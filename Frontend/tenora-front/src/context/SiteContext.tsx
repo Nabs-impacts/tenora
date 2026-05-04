@@ -28,8 +28,14 @@ export function SiteProvider({ children }: { children: ReactNode }) {
   const { data, isLoading } = useQuery({
     queryKey: SITE_QUERY_KEY,
     queryFn: () => siteApi.getInit().then((r) => r.data),
-    staleTime: 5 * 60_000,
+    // staleTime à 0 : la donnée est immédiatement considérée périmée → React Query
+    // déclenche toujours un refetch au montage et lors d'un invalidateQueries().
+    staleTime: 0,
     gcTime: 30 * 60_000,
+    // Poll toutes les 60s : les visiteurs voient le mode maintenance en moins d'une
+    // minute après que l'admin l'a activé, sans rechargement manuel.
+    refetchInterval: 60_000,
+    refetchIntervalInBackground: false,
   });
 
   // Stabilisé pour ne pas re-render tout l'arbre à chaque render parent.

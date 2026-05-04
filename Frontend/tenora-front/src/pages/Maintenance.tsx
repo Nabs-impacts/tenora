@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { Wrench } from "lucide-react";
 import { TenoraLogo } from "@/components/brand/TenoraLogo";
 import { useSite } from "@/context/SiteContext";
@@ -7,13 +7,8 @@ export default function Maintenance() {
   const { refresh } = useSite();
   const [checking, setChecking] = useState(false);
 
-  // Auto-poll toutes les 60s pour détecter la fin de la maintenance sans rechargement manuel.
-  useEffect(() => {
-    const id = window.setInterval(() => {
-      refresh();
-    }, 60_000);
-    return () => window.clearInterval(id);
-  }, [refresh]);
+  // La détection automatique de fin de maintenance est gérée par le refetchInterval
+  // configuré dans SiteContext (60s). Inutile d'en rajouter un ici.
 
   const handleCheck = async () => {
     setChecking(true);
