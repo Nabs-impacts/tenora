@@ -10,6 +10,7 @@ from app.models.order import Order, OrderStatus
 from app.models.product import Product
 from app.models.user import User
 from app.schemas.order import OrderCreate, OrderResponse, OrderStatusUpdate
+from app.services.coupon_service import validate_for_order
 from app.services.file_validator import validate_image_bytes
 from app.services.mail_service import send_order_completed, send_order_refunded, send_order_rejected
 from app.services.rate_limiter import limiter
@@ -67,25 +68,23 @@ def create_order(
     db: Session = Depends(get_db),
     user: User  = Depends(get_verified_user),
 ):
-    # Vérifier que le mode de paiement est actif
     methods     = get_setting(db, "payment_methods", DEFAULT_PAYMENT_METHODS)
     enabled_ids = [m["id"] for m in methods if m.get("enabled", True)]
     if data.payment_method not in enabled_ids:
-        raise HTTPException(
-            status_code=400,
-            detail="Mode de paiement non disponible. Veuillez en choisir un autre."
-        )
+        raise HTTPException(status_code=400,
+            detail="Mode de paiement non disponible. Veuillez en choisir un autre.")
 
     product = db.query(Product).filter(
         Product.id        == data.product_id,
-        Product.is_active == True,
+        Product.is_active == True,  # noqa: E712
     ).first()
     if not product:
         raise HTTPException(status_code=404, detail="Produit introuvable.")
 
     if product.stock is not None and product.stock > 0:
         if product.stock < data.quantity:
-            raise HTTPException(status_code=400, detail=f"Stock insuffisant — seulement {product.stock} unité(s) disponible(s).")
+            raise HTTPException(status_code=400,
+                detail=f"Stock insuffisant — seulement {product.stock} unité(s) disponible(s).")
 
     # Validation des champs requis produit
     if product.required_fields:
@@ -97,39 +96,60 @@ def create_order(
             value    = (data.customer_info or {}).get(key, "").strip()
 
             if required and not value:
-                raise HTTPException(
-                    status_code=400,
-                    detail=f"Le champ « {label} » est obligatoire."
-                )
+                raise HTTPException(status_code=400,
+                    detail=f"Le champ « {label} » est obligatoire.")
             if value and regex:
                 try:
                     if not re.match(regex, value):
-                        raise HTTPException(
-                            status_code=400,
-                            detail=f"Le champ « {label} » est invalide — format attendu : {field.get('placeholder', 'format incorrect')}."
-                        )
+                        raise HTTPException(status_code=400,
+                            detail=f"Le champ « {label} » est invalide — format attendu : "
+                                   f"{field.get('placeholder', 'format incorrect')}.")
                 except re.error:
                     logger.warning(f"Regex invalide sur le champ {key} du produit {product.id}")
 
-    total_price = product.price * data.quantity
+    # Prix de base (hors coupon)
+    base_price  = product.final_price if hasattr(product, "final_price") else product.price
+    base_total  = base_price * data.quantity
+
+    # ── Coupon (optionnel) ───────────────────────────────────────────────────
+    coupon_obj      = None
+    discount_amount = 0.0
+    if data.coupon_code:
+        coupon_obj, discount_amount, err = validate_for_order(
+            db, data.coupon_code, product, user.id, data.quantity,
+        )
+        if err:
+            raise HTTPException(status_code=400, detail=err)
+
+    final_total = max(0.0, base_total - discount_amount)
     safe_info   = sanitize_customer_info(data.customer_info or {})
 
     order = Order(
-        user_id        = user.id,
-        product_id     = data.product_id,
-        quantity       = data.quantity,
-        total_price    = total_price,
-        status         = OrderStatus.pending,
-        customer_info  = safe_info,
-        payment_method = data.payment_method,
+        user_id         = user.id,
+        product_id      = data.product_id,
+        quantity        = data.quantity,
+        total_price     = final_total,
+        status          = OrderStatus.pending,
+        customer_info   = safe_info,
+        payment_method  = data.payment_method,
+        coupon_id       = coupon_obj.id if coupon_obj else None,
+        coupon_code     = coupon_obj.code if coupon_obj else None,
+        discount_amount = discount_amount,
     )
     db.add(order)
+
+    # Incrémenter l'usage AVANT commit pour rester atomique
+    if coupon_obj:
+        coupon_obj.times_used = (coupon_obj.times_used or 0) + 1
+        db.add(coupon_obj)
+
     db.commit()
     db.refresh(order)
 
     logger.success(
         f"Commande créée | order_id={order.id} | user_id={user.id} "
-        f"| product_id={product.id} | total={total_price} | payment={data.payment_method}"
+        f"| product_id={product.id} | total={final_total} | discount={discount_amount} "
+        f"| coupon={coupon_obj.code if coupon_obj else '-'}"
     )
     return order
 
@@ -154,7 +174,6 @@ def upload_screenshot(
     if order.status != OrderStatus.pending:
         raise HTTPException(status_code=400, detail="Cette commande ne peut plus être modifiée.")
 
-    # Vérification taille
     file.file.seek(0, 2)
     file_size = file.file.tell()
     file.file.seek(0)
@@ -176,7 +195,6 @@ def upload_screenshot(
     if extension not in ("jpg", "jpeg", "png", "webp"):
         extension = "jpg"
 
-    # ── Upload via storage_service (R2 ou local selon l'env) ─────────────────
     stored_path = storage_upload(file_data, extension, "orders")
 
     order.screenshot_path = stored_path
@@ -207,8 +225,8 @@ def get_my_orders(
 
 @router.get("/admin/all", response_model=list[OrderResponse])
 def get_all_orders(
-    db: Session    = Depends(get_db),
-    admin: User    = Depends(get_admin_user),
+    db: Session = Depends(get_db),
+    admin: User = Depends(get_admin_user),
 ):
     orders = db.query(Order).order_by(Order.created_at.desc()).all()
     logger.info(f"Admin consulte toutes les commandes | admin_id={admin.id}")
@@ -289,10 +307,8 @@ def cancel_order(
     if not order:
         raise HTTPException(status_code=404, detail="Commande introuvable.")
     if order.status not in (OrderStatus.pending, OrderStatus.processing):
-        raise HTTPException(
-            status_code=400,
-            detail=f"Cette commande ne peut plus être annulée (statut actuel : {order.status})."
-        )
+        raise HTTPException(status_code=400,
+            detail=f"Cette commande ne peut plus être annulée (statut actuel : {order.status}).")
 
     order.status     = OrderStatus.rejected
     order.staff_note = "Annulée par le client"

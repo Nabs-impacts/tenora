@@ -31,7 +31,11 @@ class Order(Base):
     created_at       = Column(DateTime, server_default=func.now())
     updated_at       = Column(DateTime, server_default=func.now(), onupdate=func.now())
 
-    # ─── Système de claim / verrou (panel admin) ─────────────────────────────
+    coupon_code      = Column(String, nullable=True)
+    coupon_id        = Column(Integer, ForeignKey("coupons.id", ondelete="SET NULL"),
+                              nullable=True, index=True)
+    discount_amount  = Column(Float, nullable=False, server_default="0", default=0.0)
+
     claimed_by_id = Column(
         Integer,
         ForeignKey("users.id", ondelete="SET NULL"),
@@ -40,21 +44,10 @@ class Order(Base):
     )
     claimed_at = Column(DateTime, nullable=True)
 
-    # ─── Relations ───────────────────────────────────────────────────────────
-    # IMPORTANT : deux FK pointent vers users.id (user_id ET claimed_by_id),
-    # il faut donc TOUJOURS préciser foreign_keys sur les deux relations
-    # sinon SQLAlchemy lève AmbiguousForeignKeysError au démarrage.
-    user = relationship(
-        "User",
-        back_populates="orders",
-        foreign_keys=[user_id],
-    )
-    claimed_by = relationship(
-        "User",
-        foreign_keys=[claimed_by_id],
-        lazy="joined",
-    )
-    product = relationship("Product", back_populates="orders")
+    user       = relationship("User", back_populates="orders", foreign_keys=[user_id])
+    claimed_by = relationship("User", foreign_keys=[claimed_by_id], lazy="joined")
+    product    = relationship("Product", back_populates="orders")
+    coupon     = relationship("Coupon", foreign_keys=[coupon_id], lazy="joined")
 
     __table_args__ = (
         Index("idx_order_user",   "user_id"),

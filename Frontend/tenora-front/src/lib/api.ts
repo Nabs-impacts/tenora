@@ -78,7 +78,7 @@ export interface User {
   id: number;
   email: string;
   phone: string | null;
-  username: string | null;          // ← AJOUT
+  username: string | null;
   is_verified: boolean;
   is_admin: boolean;
   created_at: string;
@@ -136,6 +136,8 @@ export interface Order {
   customer_info: Record<string, string> | null;
   staff_note: string | null;
   payment_method: string | null;
+  coupon_code?: string | null;
+  discount_amount?: number | null;
   created_at: string;
   updated_at: string;
 }
@@ -165,6 +167,19 @@ export interface SiteInit {
   /** IDs des produits mis en avant (section "Hot Now" sur la home),
    *  configures dans le panel admin via la cle de settings `featured_product_ids`. */
   featured_product_ids: number[];
+}
+
+// ─── Coupons ───────────────────────────────────────────────
+export interface CouponValidation {
+  valid: boolean;
+  code: string;
+  discount_type: "percent" | "amount";
+  discount_value: number;
+  /** Montant de la reduction applique sur la commande courante. */
+  discount_amount: number;
+  /** Total apres reduction. */
+  final_total: number;
+  message?: string | null;
 }
 
 // ─── Endpoints ─────────────────────────────────────────────
@@ -203,6 +218,8 @@ export const ordersApi = {
     quantity: number;
     customer_info?: Record<string, string>;
     payment_method: string;
+    /** Code promo optionnel — valide cote backend. */
+    coupon_code?: string;
   }) => api.post<Order>("/orders/", data),
   uploadScreenshot: (orderId: number, file: File) => {
     const form = new FormData();
@@ -213,6 +230,18 @@ export const ordersApi = {
   },
   cancel: (orderId: number) => api.post<Order>(`/orders/${orderId}/cancel`),
   myOrders: () => api.get<Order[]>("/orders/my"),
+};
+
+export const couponsApi = {
+  /** Valide un code promo cote backend pour un produit/quantite donnes.
+   *  Retourne le montant de la reduction calcule + total final.
+   *  Aucune mutation cote backend (idempotent), donc OK a appeler depuis l'UI. */
+  validate: (data: { code: string; product_id: number; quantity?: number }) =>
+    api.post<CouponValidation>("/coupons/validate", {
+      code: data.code,
+      product_id: data.product_id,
+      quantity: data.quantity ?? 1,
+    }),
 };
 
 export const importsApi = {

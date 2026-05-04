@@ -1,9 +1,15 @@
 import { useState } from "react";
 import { useNavigate, useParams, Link } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
-import { ArrowLeft, Check, Loader2, Upload, ShieldCheck, Zap, Image as ImageIcon, MessageCircle, Clock, BadgeCheck } from "lucide-react";
+import {
+  ArrowLeft, Check, Loader2, Upload, ShieldCheck, Zap,
+  Image as ImageIcon, MessageCircle, Clock, BadgeCheck, Tag, X,
+} from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { productsApi, ordersApi, formatXOF, type Order } from "@/lib/api";
+import {
+  productsApi, ordersApi, couponsApi, formatXOF,
+  type Order, type CouponValidation,
+} from "@/lib/api";
 import { useAuth } from "@/context/AuthContext";
 import { useSite } from "@/context/SiteContext";
 import { toast } from "sonner";
@@ -45,6 +51,12 @@ export default function ProductPage() {
   const [uploading, setUploading] = useState(false);
   const [orderError, setOrderError] = useState("");
 
+  // ─── Coupon state ──────────────────────────────────────
+  const [couponInput, setCouponInput] = useState("");
+  const [couponLoading, setCouponLoading] = useState(false);
+  const [coupon, setCoupon] = useState<CouponValidation | null>(null);
+  const [couponError, setCouponError] = useState("");
+
   const paymentMethods = (site?.payment_methods || []).filter((m) => m.enabled);
   const wa = site?.whatsapp_number?.replace(/\D/g, "") || "";
 
@@ -72,6 +84,9 @@ export default function ProductPage() {
     );
   }
 
+  const basePrice = product.final_price ?? product.price;
+  const finalTotal = coupon ? coupon.final_total : basePrice;
+
   const validateFields = () => {
     if (!product.required_fields) return true;
     for (const f of product.required_fields) {
@@ -89,6 +104,42 @@ export default function ProductPage() {
       }
     }
     return true;
+  };
+
+  const applyCoupon = async () => {
+    const code = couponInput.trim().toUpperCase();
+    if (!code) {
+      setCouponError("Entrez un code promo.");
+      return;
+    }
+    setCouponError("");
+    setCouponLoading(true);
+    try {
+      const r = await couponsApi.validate({
+        code,
+        product_id: product.id,
+        quantity: 1,
+      });
+      if (!r.data.valid) {
+        setCouponError(r.data.message || "Code promo invalide.");
+        setCoupon(null);
+      } else {
+        setCoupon(r.data);
+        toast.success(`Code « ${r.data.code} » appliqué — ${formatXOF(r.data.discount_amount)} de réduction.`);
+      }
+    } catch (e: any) {
+      const msg = e?.response?.data?.detail || "Code promo invalide ou expiré.";
+      setCouponError(typeof msg === "string" ? msg : "Code promo invalide.");
+      setCoupon(null);
+    } finally {
+      setCouponLoading(false);
+    }
+  };
+
+  const removeCoupon = () => {
+    setCoupon(null);
+    setCouponInput("");
+    setCouponError("");
   };
 
   const handleCreate = async () => {
@@ -119,6 +170,7 @@ export default function ProductPage() {
         quantity: 1,
         customer_info: fields,
         payment_method: paymentMethod,
+        coupon_code: coupon?.code,
       });
       setOrder(r.data);
     } catch (e: any) {
@@ -166,7 +218,7 @@ export default function ProductPage() {
             )}
           </div>
 
-          {/* Badges produit — redessinés pour plus d'impact */}
+          {/* Badges produit */}
           <div className="grid grid-cols-3 gap-2 mt-3">
             <div className="flex flex-col items-center gap-1.5 border-2 border-success/50 bg-success/10 px-2 py-2.5 text-center">
               <Check className="size-4 text-success" strokeWidth={2.5} />
@@ -198,11 +250,18 @@ export default function ProductPage() {
             })()}
           </div>
 
-          <div className="flex items-baseline gap-3">
+          <div className="flex items-baseline gap-3 flex-wrap">
             <span className="font-display text-3xl md:text-4xl font-bold gradient-text">
-              {formatXOF(product.final_price ?? product.price)}
+              {formatXOF(finalTotal)}
             </span>
-            {product.discount_percent ? (
+            {coupon ? (
+              <>
+                <span className="text-muted-foreground line-through">{formatXOF(basePrice)}</span>
+                <span className="chip bg-success text-success-foreground font-bold">
+                  -{formatXOF(coupon.discount_amount)}
+                </span>
+              </>
+            ) : product.discount_percent ? (
               <>
                 <span className="text-muted-foreground line-through">{formatXOF(product.price)}</span>
                 <span className="chip bg-destructive text-destructive-foreground font-bold">-{product.discount_percent}%</span>
@@ -237,6 +296,71 @@ export default function ProductPage() {
                         />
                       </div>
                     ))}
+                  </div>
+                )}
+
+                {/* ─── Coupon (avant le paiement) ────────────── */}
+                {!product.whatsapp_redirect && (
+                  <div className="space-y-2">
+                    <div className="flex items-center gap-2 pb-2 border-b-2 border-border">
+                      <Tag className="size-4 text-primary" />
+                      <p className="font-bold text-sm uppercase tracking-wider">Code promo</p>
+                    </div>
+
+                    {coupon ? (
+                      <div className="flex items-center justify-between gap-2 border-2 border-success/50 bg-success/10 px-3 py-2.5">
+                        <div className="flex items-center gap-2 min-w-0">
+                          <BadgeCheck className="size-4 text-success shrink-0" />
+                          <div className="min-w-0">
+                            <p className="font-mono text-sm font-bold text-success truncate">{coupon.code}</p>
+                            <p className="text-[11px] text-success/80">
+                              -{formatXOF(coupon.discount_amount)} appliqué
+                            </p>
+                          </div>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={removeCoupon}
+                          className="p-1.5 hover:bg-success/20 transition-colors"
+                          aria-label="Retirer le code promo"
+                        >
+                          <X className="size-4 text-success" />
+                        </button>
+                      </div>
+                    ) : (
+                      <>
+                        <div className="flex gap-2">
+                          <input
+                            value={couponInput}
+                            onChange={(e) => {
+                              setCouponInput(e.target.value.toUpperCase());
+                              if (couponError) setCouponError("");
+                            }}
+                            onKeyDown={(e) => {
+                              if (e.key === "Enter") {
+                                e.preventDefault();
+                                applyCoupon();
+                              }
+                            }}
+                            placeholder="TENORA-XXXXXXXX"
+                            className="flex-1 h-11 px-3 bg-input border border-border text-sm font-mono uppercase tracking-wider focus:outline-none focus:ring-2 focus:ring-primary/40 focus:border-primary"
+                            maxLength={32}
+                          />
+                          <Button
+                            type="button"
+                            variant="outline"
+                            onClick={applyCoupon}
+                            disabled={couponLoading || !couponInput.trim()}
+                            className="h-11 px-4 shrink-0"
+                          >
+                            {couponLoading ? <Loader2 className="size-4 animate-spin" /> : "Appliquer"}
+                          </Button>
+                        </div>
+                        {couponError && (
+                          <p className="text-xs text-destructive">{couponError}</p>
+                        )}
+                      </>
+                    )}
                   </div>
                 )}
 
@@ -285,6 +409,24 @@ export default function ProductPage() {
                           </button>
                         );
                       })}
+                    </div>
+                  </div>
+                )}
+
+                {/* Recap total si un coupon est applique */}
+                {coupon && !product.whatsapp_redirect && (
+                  <div className="border-t border-border pt-3 space-y-1 text-sm">
+                    <div className="flex justify-between text-muted-foreground">
+                      <span>Sous-total</span>
+                      <span>{formatXOF(basePrice)}</span>
+                    </div>
+                    <div className="flex justify-between text-success">
+                      <span>Réduction ({coupon.code})</span>
+                      <span>-{formatXOF(coupon.discount_amount)}</span>
+                    </div>
+                    <div className="flex justify-between font-bold text-base pt-1 border-t border-border">
+                      <span>Total</span>
+                      <span>{formatXOF(finalTotal)}</span>
                     </div>
                   </div>
                 )}

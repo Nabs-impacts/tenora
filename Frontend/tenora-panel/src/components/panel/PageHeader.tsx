@@ -6,10 +6,12 @@ interface PageHeaderProps {
   title: string;
   subtitle?: string;
   children?: ReactNode;
+  action?: ReactNode;
   className?: string;
 }
 
-export function PageHeader({ eyebrow, title, subtitle, children, className }: PageHeaderProps) {
+export function PageHeader({ eyebrow, title, subtitle, children, action, className }: PageHeaderProps) {
+  const rightSlot = action ?? children;
   return (
     <div className={cn("flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between", className)}>
       <div className="space-y-1.5">
@@ -26,7 +28,7 @@ export function PageHeader({ eyebrow, title, subtitle, children, className }: Pa
           <p className="text-sm text-muted-foreground mono">{subtitle}</p>
         )}
       </div>
-      {children && <div className="flex flex-wrap items-center gap-2">{children}</div>}
+      {rightSlot && <div className="flex flex-wrap items-center gap-2">{rightSlot}</div>}
     </div>
   );
 }

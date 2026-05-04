@@ -14,6 +14,7 @@ from sqlalchemy.orm import Session, joinedload
 from app.config import settings
 from app.database import get_db
 from app.dependencies import get_admin_user
+from app.models.coupon import Coupon
 from app.models.import_request import ImportRequest
 from app.models.order import Order, OrderStatus
 from app.models.product import Category, Product
@@ -24,6 +25,8 @@ from app.routes.order_claim import (
     serialize_claim,
 )
 from app.routes.site import invalidate_site_cache
+from app.schemas.coupon import CouponCreate, CouponUpdate, CouponResponse
+from app.services.coupon_service import generate_code, normalize_code, is_valid_format
 from app.services.settings_service import (
     DEFAULT_ANNOUNCEMENT,
     DEFAULT_PAYMENT_METHODS,
@@ -150,9 +153,6 @@ def save_image(file_data: bytes, filename: str, subfolder: str) -> str:
     if len(file_data) > 5 * 1024 * 1024:
         raise HTTPException(status_code=400, detail="Image trop lourde (max 5 MB).")
     file_data = _compress_image(file_data, ext)
-    # NOTE FRONTEND : l'upload vers R2 est bloquant côté backend (~1-3s selon
-    # la taille). Afficher un loader dès le clic dans Vue.js et le retirer
-    # uniquement à la résolution de la promesse fetch().
     return storage_upload(file_data, ext, subfolder)
 
 
@@ -163,17 +163,10 @@ def get_dashboard(
     db:    Session = Depends(get_db),
     admin: User    = Depends(get_admin_user),
 ):
-    """Stats globales pour la page d'accueil du panel.
-
-    OPTIMISATION : toutes les métriques Order sont calculées en 1 seule requête
-    SQL (au lieu de 6 aller-retours séparés) grâce à func.count/sum + case().
-    User et Product nécessitent leurs propres requêtes (tables distinctes).
-    """
     now   = datetime.utcnow()
     today = now.replace(hour=0, minute=0, second=0, microsecond=0)
     week  = today - timedelta(days=7)
 
-    # ── 1 requête unique pour toutes les métriques Order ──────────────────────
     order_stats = db.query(
         func.count(Order.id).label("total_orders"),
         func.count(
@@ -199,11 +192,9 @@ def get_dashboard(
         ).label("revenue_week"),
     ).first()
 
-    # ── Compteurs sur d'autres tables (inévitables) ───────────────────────────
     total_users    = db.query(func.count(User.id)).scalar() or 0
-    total_products = db.query(func.count(Product.id)).filter(Product.is_active == True).scalar() or 0
+    total_products = db.query(func.count(Product.id)).filter(Product.is_active == True).scalar() or 0  # noqa: E712
 
-    # ── Graphique 7 jours — déjà une seule requête groupée ───────────────────
     daily_orders = (
         db.query(
             func.date(Order.created_at).label("day"),
@@ -244,11 +235,6 @@ def list_orders(
     db:       Session    = Depends(get_db),
     admin:    User       = Depends(get_admin_user),
 ):
-    """Liste paginée des commandes avec filtre optionnel par statut.
-
-    OPTIMISATION N+1 : joinedload(Order.user) + joinedload(Order.product)
-    récupère user et produit en une seule JOIN au lieu de 1 requête par ligne.
-    """
     q = (
         db.query(Order)
         .options(joinedload(Order.user), joinedload(Order.product))
@@ -275,6 +261,8 @@ def list_orders(
                 "product_name":    o.product.name if o.product else None,
                 "quantity":        o.quantity,
                 "total_price":     float(o.total_price),
+                "discount_amount": float(o.discount_amount or 0),
+                "coupon_code":     o.coupon_code,
                 "status":          o.status.value,
                 "payment_method":  o.payment_method,
                 "customer_info":   o.customer_info,
@@ -294,7 +282,6 @@ def get_order(
     db:       Session = Depends(get_db),
     admin:    User    = Depends(get_admin_user),
 ):
-    # joinedload évite 2 requêtes supplémentaires pour .user et .product
     order = (
         db.query(Order)
         .options(joinedload(Order.user), joinedload(Order.product))
@@ -311,6 +298,8 @@ def get_order(
         "product_name":    order.product.name if order.product else None,
         "quantity":        order.quantity,
         "total_price":     float(order.total_price),
+        "discount_amount": float(order.discount_amount or 0),
+        "coupon_code":     order.coupon_code,
         "status":          order.status.value,
         "payment_method":  order.payment_method,
         "customer_info":   order.customer_info,
@@ -328,11 +317,6 @@ def update_order_status(
     db:       Session = Depends(get_db),
     admin:    User    = Depends(get_admin_user),
 ):
-    """Met à jour le statut d'une commande et envoie l'email client.
-
-    OPTIMISATION N+1 : joinedload charge user + product avec la commande,
-    supprimant les 2 db.query() séparés qui existaient ensuite.
-    """
     order = (
         db.query(Order)
         .options(joinedload(Order.user), joinedload(Order.product))
@@ -345,12 +329,9 @@ def update_order_status(
     if data.status not in ORDER_STATUSES:
         raise HTTPException(status_code=400, detail=f"Statut invalide : {data.status}")
 
-    # ── HARD LOCK : refuse si la commande est claim par un autre admin ──
     ensure_can_edit_order(order, admin, db)
 
     from app.services.mail_service import send_order_completed
-
-    # client et product déjà chargés via joinedload — aucune requête supplémentaire
     client  = order.user
     product = order.product
 
@@ -358,7 +339,6 @@ def update_order_status(
     order.status     = OrderStatus[data.status]
     order.staff_note = data.staff_note
 
-    # Auto-release du verrou si on passe en statut terminal
     from app.routes.order_claim import TERMINAL_STATUSES
     if data.status in TERMINAL_STATUSES:
         release_claim(order)
@@ -387,11 +367,6 @@ def export_orders_csv(
     db:     Session    = Depends(get_db),
     admin:  User       = Depends(get_admin_user),
 ):
-    """Export CSV de toutes les commandes (ou filtrées par statut).
-
-    OPTIMISATION N+1 : joinedload évite N requêtes user/product lors du
-    rendu de chaque ligne CSV.
-    """
     q = (
         db.query(Order)
         .options(joinedload(Order.user), joinedload(Order.product))
@@ -405,7 +380,7 @@ def export_orders_csv(
 
     output = io.StringIO()
     writer = csv.writer(output)
-    writer.writerow(["ID", "Date", "Client", "Produit", "Qté", "Total (FCFA)", "Statut", "Paiement", "Note admin"])
+    writer.writerow(["ID", "Date", "Client", "Produit", "Qté", "Total (FCFA)", "Remise", "Coupon", "Statut", "Paiement", "Note admin"])
     for o in orders:
         writer.writerow([
             o.id,
@@ -414,6 +389,8 @@ def export_orders_csv(
             o.product.name if o.product else o.product_id,
             o.quantity,
             int(o.total_price),
+            int(o.discount_amount or 0),
+            o.coupon_code or "",
             o.status.value,
             o.payment_method,
             o.staff_note or "",
@@ -441,13 +418,6 @@ def list_products(
     db:          Session    = Depends(get_db),
     admin:       User       = Depends(get_admin_user),
 ):
-    """Liste paginée + filtrée des produits.
-
-    OPTIMISATION N+1 : joinedload(Product.category) charge le nom de la
-    catégorie en une seule JOIN au lieu d'une requête par produit.
-    OPTIMISATION : filtres + pagination côté serveur (au lieu de tout charger).
-    Format de réponse : { products, total, page, per_page }.
-    """
     base = (
         db.query(Product)
         .options(joinedload(Product.category))
@@ -533,10 +503,7 @@ def update_product(
     if not p:
         raise HTTPException(status_code=404, detail="Produit introuvable.")
 
-    # `exclude_unset=True` permet d'envoyer explicitement des valeurs (y compris None)
-    # tout en ignorant les champs absents de la requête.
     payload = data.model_dump(exclude_unset=True)
-    # Si on change la catégorie, vérifier qu'elle existe
     if "category_id" in payload and payload["category_id"] is not None:
         if not db.query(Category).filter(Category.id == payload["category_id"]).first():
             raise HTTPException(status_code=404, detail="Catégorie cible introuvable.")
@@ -606,8 +573,6 @@ def list_categories(
     db:    Session = Depends(get_db),
     admin: User    = Depends(get_admin_user),
 ):
-    """OPTIMISATION : récupère le product_count via un LEFT JOIN + GROUP BY,
-    ce qui évite d'appeler /panel/products juste pour compter côté front."""
     rows = (
         db.query(
             Category,
@@ -662,9 +627,6 @@ def update_category(
     cat = db.query(Category).filter(Category.id == category_id).first()
     if not cat:
         raise HTTPException(status_code=404, detail="Catégorie introuvable.")
-    # `exclude_unset=True` au lieu de `exclude_none=True` :
-    # permet de remettre `parent_id` à None pour détacher une sous-catégorie,
-    # tout en ignorant les champs absents de la requête.
     payload = data.model_dump(exclude_unset=True)
     if payload.get("parent_id") == category_id:
         raise HTTPException(status_code=400, detail="Une catégorie ne peut pas être son propre parent.")
@@ -802,13 +764,6 @@ def list_imports(
     db:       Session    = Depends(get_db),
     admin:    User       = Depends(get_admin_user),
 ):
-    """Liste paginée des demandes d'import.
-
-    OPTIMISATION N+1 : joinedload(ImportRequest.user) charge les emails
-    en une seule JOIN au lieu d'une requête par ligne.
-    OPTIMISATION : pagination par défaut 100 (au lieu de tout renvoyer).
-    Format de réponse : { items, total, page, per_page }.
-    """
     q = (
         db.query(ImportRequest)
         .options(joinedload(ImportRequest.user))
@@ -831,9 +786,9 @@ def list_imports(
             "user_name":           (getattr(r.user, "full_name", None) or getattr(r.user, "name", None)) if r.user else None,
             "category_id":         r.category_id,
             "article_url":         r.article_url,
-            "product_link":        r.article_url,            # alias frontend
+            "product_link":        r.article_url,
             "article_description": r.article_description,
-            "notes":               r.article_description,    # alias frontend
+            "notes":               r.article_description,
             "screenshot_path":     r.screenshot_path,
             "screenshot_url":      f"/uploads/{r.screenshot_path}" if r.screenshot_path else None,
             "status":              r.status.value if hasattr(r.status, "value") else r.status,
@@ -872,7 +827,6 @@ def get_settings(
     db:    Session = Depends(get_db),
     admin: User    = Depends(get_admin_user),
 ):
-    """Retourne tous les paramètres éditables du panel."""
     maintenance     = get_setting(db, "maintenance_mode", False)
     announcement    = get_setting(db, "announcement", DEFAULT_ANNOUNCEMENT)
     payment_methods = get_setting(db, "payment_methods", DEFAULT_PAYMENT_METHODS)
@@ -959,7 +913,6 @@ def get_featured_products(
     db:    Session = Depends(get_db),
     admin: User    = Depends(get_admin_user),
 ):
-    """Retourne la liste ordonnée des IDs de produits mis en avant + détails."""
     raw = get_setting(db, "featured_product_ids", [])
     if not isinstance(raw, list):
         raw = []
@@ -988,11 +941,6 @@ def update_featured_products(
     db:    Session = Depends(get_db),
     admin: User    = Depends(get_admin_user),
 ):
-    """
-    Met à jour la liste ordonnée des produits mis en avant sur la home (Hot Now).
-    L'ordre du tableau est préservé. Limite à 12 produits.
-    """
-    # Dédoublonne en préservant l'ordre
     seen = set()
     cleaned: list[int] = []
     for pid in data.product_ids:
@@ -1022,3 +970,115 @@ def update_featured_products(
         "message":     f"{len(cleaned)} produit(s) en Hot Now.",
         "product_ids": cleaned,
     }
+
+
+# ─── COUPONS — admin only ─────────────────────────────────────────────────────
+
+@router.get("/coupons", response_model=list[CouponResponse])
+def list_coupons(
+    db:     Session       = Depends(get_db),
+    admin:  User          = Depends(get_admin_user),
+    q:      str | None    = Query(None),
+    active: bool | None   = Query(None),
+):
+    """Liste des coupons (filtre optionnel `q` sur le code, `active` bool)."""
+    query = db.query(Coupon)
+    if q:
+        query = query.filter(Coupon.code.ilike(f"%{q.upper()}%"))
+    if active is not None:
+        query = query.filter(Coupon.is_active == active)
+    items = query.order_by(Coupon.created_at.desc()).all()
+    return [CouponResponse.from_orm_full(c) for c in items]
+
+
+@router.post("/coupons", response_model=CouponResponse)
+def create_coupon(
+    data:  CouponCreate,
+    db:    Session = Depends(get_db),
+    admin: User    = Depends(get_admin_user),
+):
+    if data.code:
+        code = normalize_code(data.code)
+        if not is_valid_format(code):
+            raise HTTPException(status_code=400,
+                detail="Le code doit être au format TENORA-XXXXXXXX (8 à 12 caractères A-Z/0-9).")
+        if db.query(Coupon.id).filter(Coupon.code == code).first():
+            raise HTTPException(status_code=409, detail="Ce code existe déjà.")
+    else:
+        code = generate_code(db, length=data.code_length)
+
+    coupon = Coupon(
+        code             = code,
+        discount_percent = data.discount_percent,
+        discount_amount  = data.discount_amount,
+        user_id          = data.user_id,
+        max_uses         = data.max_uses,
+        expires_at       = data.expires_at,
+        is_active        = data.is_active,
+    )
+    if data.product_ids:
+        coupon.products = db.query(Product).filter(Product.id.in_(data.product_ids)).all()
+    if data.category_ids:
+        coupon.categories = db.query(Category).filter(Category.id.in_(data.category_ids)).all()
+
+    db.add(coupon)
+    db.commit()
+    db.refresh(coupon)
+    logger.success(f"Coupon créé | id={coupon.id} | code={coupon.code} | by admin {admin.id}")
+    return CouponResponse.from_orm_full(coupon)
+
+
+@router.put("/coupons/{coupon_id}", response_model=CouponResponse)
+def update_coupon(
+    coupon_id: int,
+    data:      CouponUpdate,
+    db:        Session = Depends(get_db),
+    admin:     User    = Depends(get_admin_user),
+):
+    coupon = db.query(Coupon).filter(Coupon.id == coupon_id).first()
+    if not coupon:
+        raise HTTPException(status_code=404, detail="Coupon introuvable.")
+
+    payload = data.model_dump(exclude_unset=True)
+    if "discount_percent" in payload or "discount_amount" in payload:
+        new_pct = payload.get("discount_percent", coupon.discount_percent)
+        new_amt = payload.get("discount_amount",  coupon.discount_amount)
+        if (new_pct is None) == (new_amt is None):
+            raise HTTPException(status_code=400,
+                detail="Renseignez soit un pourcentage, soit un montant fixe (un seul).")
+        coupon.discount_percent = new_pct
+        coupon.discount_amount  = new_amt
+
+    for f in ("user_id", "max_uses", "expires_at", "is_active"):
+        if f in payload:
+            setattr(coupon, f, payload[f])
+
+    if "product_ids" in payload:
+        coupon.products = (
+            db.query(Product).filter(Product.id.in_(payload["product_ids"])).all()
+            if payload["product_ids"] else []
+        )
+    if "category_ids" in payload:
+        coupon.categories = (
+            db.query(Category).filter(Category.id.in_(payload["category_ids"])).all()
+            if payload["category_ids"] else []
+        )
+
+    db.add(coupon)
+    db.commit()
+    db.refresh(coupon)
+    return CouponResponse.from_orm_full(coupon)
+
+
+@router.delete("/coupons/{coupon_id}")
+def delete_coupon(
+    coupon_id: int,
+    db:        Session = Depends(get_db),
+    admin:     User    = Depends(get_admin_user),
+):
+    coupon = db.query(Coupon).filter(Coupon.id == coupon_id).first()
+    if not coupon:
+        raise HTTPException(status_code=404, detail="Coupon introuvable.")
+    db.delete(coupon)
+    db.commit()
+    return {"status": "ok"}

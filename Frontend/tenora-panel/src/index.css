@@ -6,13 +6,10 @@
 
 /* =========================================================================
    TENORA PANEL — NEON BRUTALISM+ DESIGN SYSTEM
-   Inspiration : terminal HUD / streetwear gaming / brutaliste
-   Twist signature : marqueurs d'angle [ ], scanlines, charcoal background
    ========================================================================= */
 
 @layer base {
   :root {
-    /* Surfaces — Charcoal au lieu de void noir, plus pro pour un admin */
     --background: 240 8% 7%;
     --foreground: 60 10% 96%;
 
@@ -32,23 +29,19 @@
     --input: 240 5% 14%;
     --ring: 72 100% 50%;
 
-    /* Brand — Acid lime (signature) */
     --primary: 72 100% 52%;
     --primary-foreground: 240 10% 5%;
     --primary-glow: 72 100% 65%;
     --primary-soft: 72 60% 12%;
 
-    /* Secondary — Magenta */
     --secondary: 320 100% 58%;
     --secondary-foreground: 0 0% 100%;
     --secondary-soft: 320 60% 12%;
 
-    /* Tertiary — Electric blue (au lieu de cyan classique, plus signé) */
     --tertiary: 220 100% 62%;
     --tertiary-foreground: 0 0% 100%;
     --tertiary-soft: 220 60% 12%;
 
-    /* Status colors */
     --success: 145 75% 50%;
     --success-foreground: 240 10% 5%;
     --success-soft: 145 50% 10%;
@@ -64,20 +57,16 @@
     --info: 200 100% 55%;
     --info-soft: 200 60% 12%;
 
-    /* Radius — minimal brutaliste */
     --radius: 0.25rem;
 
-    /* Gradients signatures */
     --gradient-primary: linear-gradient(135deg, hsl(var(--primary)) 0%, hsl(var(--primary-glow)) 100%);
     --gradient-mesh: radial-gradient(at 20% 0%, hsl(var(--primary) / 0.15) 0px, transparent 50%),
                      radial-gradient(at 80% 0%, hsl(var(--secondary) / 0.10) 0px, transparent 50%),
                      radial-gradient(at 50% 100%, hsl(var(--tertiary) / 0.10) 0px, transparent 50%);
 
-    /* Transitions */
     --transition-fast: 150ms cubic-bezier(0.22, 1, 0.36, 1);
     --transition-smooth: 280ms cubic-bezier(0.22, 1, 0.36, 1);
 
-    /* Sidebar */
     --sidebar-background: 240 9% 6%;
     --sidebar-foreground: 60 10% 90%;
     --sidebar-primary: 72 100% 52%;
@@ -90,34 +79,26 @@
 }
 
 @layer base {
-  * {
-    @apply border-border;
-  }
-  html {
-    -webkit-font-smoothing: antialiased;
-  }
+  * { @apply border-border; }
+  html { -webkit-font-smoothing: antialiased; }
   body {
     @apply bg-background text-foreground;
     font-family: 'Space Grotesk', ui-sans-serif, system-ui, sans-serif;
     background-image: var(--gradient-mesh);
     background-attachment: fixed;
   }
-  /* Scanline ambient texture (signature) */
   body::before {
     content: '';
     position: fixed;
     inset: 0;
     background-image: repeating-linear-gradient(
-      0deg,
-      transparent 0,
-      transparent 2px,
+      0deg, transparent 0, transparent 2px,
       hsl(var(--foreground) / 0.012) 2px,
       hsl(var(--foreground) / 0.012) 3px
     );
     pointer-events: none;
     z-index: 1;
   }
-  /* Scrollbars */
   ::-webkit-scrollbar { width: 10px; height: 10px; }
   ::-webkit-scrollbar-track { background: hsl(var(--background)); }
   ::-webkit-scrollbar-thumb {
@@ -128,7 +109,6 @@
 }
 
 @layer components {
-  /* ========== Brutalist Card with hover lift ========== */
   .brut-card {
     @apply relative bg-card border-2 border-border;
     transition: transform var(--transition-fast), border-color var(--transition-fast), box-shadow var(--transition-fast);
@@ -139,45 +119,27 @@
     box-shadow: 6px 6px 0 0 hsl(var(--primary) / 0.7);
   }
 
-  /* ========== Corner brackets — SIGNATURE [ ] ========== */
-  .brackets {
-    position: relative;
-  }
-  .brackets::before,
-  .brackets::after {
+  .brackets { position: relative; }
+  .brackets::before, .brackets::after {
     content: '';
     position: absolute;
-    width: 10px;
-    height: 10px;
+    width: 10px; height: 10px;
     border-color: hsl(var(--primary));
     border-style: solid;
     pointer-events: none;
     transition: all var(--transition-smooth);
   }
-  .brackets::before {
-    top: -2px; left: -2px;
-    border-width: 2px 0 0 2px;
-  }
-  .brackets::after {
-    bottom: -2px; right: -2px;
-    border-width: 0 2px 2px 0;
-  }
-  .brackets:hover::before {
-    width: 16px; height: 16px;
-  }
-  .brackets:hover::after {
-    width: 16px; height: 16px;
-  }
+  .brackets::before { top: -2px; left: -2px; border-width: 2px 0 0 2px; }
+  .brackets::after  { bottom: -2px; right: -2px; border-width: 0 2px 2px 0; }
+  .brackets:hover::before { width: 16px; height: 16px; }
+  .brackets:hover::after  { width: 16px; height: 16px; }
 
-  /* ========== Brutalist Button ========== */
   .brut-btn {
     @apply relative inline-flex items-center justify-center font-bold uppercase tracking-wider border-2;
     font-family: 'JetBrains Mono', monospace;
     transition: transform var(--transition-fast);
   }
-  .brut-btn-shadow {
-    isolation: isolate;
-  }
+  .brut-btn-shadow { isolation: isolate; }
   .brut-btn-shadow::after {
     content: '';
     position: absolute;
@@ -187,20 +149,14 @@
     z-index: -1;
     transition: transform var(--transition-smooth);
   }
-  .brut-btn-shadow:hover::after {
-    transform: translate(8px, 8px);
-  }
-  .brut-btn-shadow:hover {
-    transform: translate(-2px, -2px);
-  }
+  .brut-btn-shadow:hover::after { transform: translate(8px, 8px); }
+  .brut-btn-shadow:hover { transform: translate(-2px, -2px); }
 
-  /* ========== Chip / micro-tag ========== */
   .chip {
     @apply inline-flex items-center gap-1.5 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.15em] border;
     font-family: 'JetBrains Mono', monospace;
   }
 
-  /* ========== Gradient text ========== */
   .gradient-text {
     background: var(--gradient-primary);
     -webkit-background-clip: text;
@@ -208,13 +164,11 @@
     color: transparent;
   }
 
-  /* ========== Mono label (eyebrow) ========== */
   .eyebrow {
     @apply text-[10px] font-bold uppercase tracking-[0.3em] text-primary;
     font-family: 'JetBrains Mono', monospace;
   }
 
-  /* ========== Display heading ========== */
   .display {
     font-family: 'Space Grotesk', sans-serif;
     font-weight: 700;
@@ -222,12 +176,8 @@
     line-height: 0.95;
   }
 
-  /* ========== Mono utility ========== */
-  .mono {
-    font-family: 'JetBrains Mono', monospace;
-  }
+  .mono { font-family: 'JetBrains Mono', monospace; }
 
-  /* ========== Status dot ========== */
   .status-dot {
     @apply inline-block w-1.5 h-1.5 rounded-full;
     box-shadow: 0 0 8px currentColor;
@@ -235,19 +185,10 @@
 }
 
 @layer utilities {
-  /* Animations */
-  .animate-fade-up {
-    animation: fade-up 0.5s cubic-bezier(0.22, 1, 0.36, 1) both;
-  }
-  .animate-slide-in {
-    animation: slide-in 0.35s cubic-bezier(0.22, 1, 0.36, 1) both;
-  }
-  .animate-pulse-glow {
-    animation: pulse-glow 2.4s ease-in-out infinite;
-  }
-  .animate-blink {
-    animation: blink 1.4s step-end infinite;
-  }
+  .animate-fade-up   { animation: fade-up 0.5s cubic-bezier(0.22, 1, 0.36, 1) both; }
+  .animate-slide-in  { animation: slide-in 0.35s cubic-bezier(0.22, 1, 0.36, 1) both; }
+  .animate-pulse-glow{ animation: pulse-glow 2.4s ease-in-out infinite; }
+  .animate-blink     { animation: blink 1.4s step-end infinite; }
 
   @keyframes fade-up {
     from { opacity: 0; transform: translateY(14px); }
@@ -266,7 +207,6 @@
     50%      { opacity: 0.2; }
   }
 
-  /* Grid background */
   .bg-grid {
     background-image:
       linear-gradient(hsl(var(--border) / 0.4) 1px, transparent 1px),
@@ -276,4 +216,12 @@
   .bg-grid-fade {
     mask-image: radial-gradient(ellipse at center, black 30%, transparent 80%);
   }
+
+  .tap-target {
+    -webkit-tap-highlight-color: transparent;
+    touch-action: manipulation;
+    min-height: 44px;
+  }
+  .tap-target-icon { min-width: 44px; min-height: 44px; }
+  .pb-safe { padding-bottom: env(safe-area-inset-bottom); }
 }

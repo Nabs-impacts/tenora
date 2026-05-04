@@ -1,4 +1,5 @@
 from datetime import datetime
+from typing import Optional
 
 from pydantic import BaseModel, ConfigDict
 
@@ -9,7 +10,8 @@ class OrderCreate(BaseModel):
     product_id:     int
     quantity:       int = 1
     customer_info:  dict[str, str] = {}
-    payment_method: str | None = None    # optionnel — sera validé si fourni
+    payment_method: str | None = None
+    coupon_code:    str | None = None
 
 
 class OrderResponse(BaseModel):
@@ -20,6 +22,8 @@ class OrderResponse(BaseModel):
     product_id:      int
     quantity:        int
     total_price:     float
+    discount_amount: float = 0.0
+    coupon_code:     str | None = None
     status:          str
     screenshot_path: str | None = None
     customer_info:   dict | None = None
