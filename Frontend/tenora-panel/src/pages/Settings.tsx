@@ -22,12 +22,20 @@ interface PM {
 }
 
 const PM_DEFS: Omit<PM, "enabled" | "instructions">[] = [
-  { key: "wave", label: "Wave", desc: "Mobile money - Wave Niger" },
-  { key: "airtel", label: "Airtel Money", desc: "Mobile money - Airtel Niger" },
-  { key: "mynita", label: "Mynita", desc: "Mobile Money - Mynita" },
-  { key: "amanata", label: "Amanata", desc: "Mobile Money - Amanata" },
-  { key: "usdt", label: "USDT TRC20", desc: "Crypto - reseau Tron (TRC20)" },
-  { key: "zcash", label: "ZCash", desc: "Mobile Money - ZCash" },
+  { key: "wave",    label: "Wave",        desc: "Mobile money - Wave Niger" },
+  { key: "airtel",  label: "Airtel Money",desc: "Mobile money - Airtel Niger" },
+  { key: "mynita",  label: "Mynita",      desc: "Mobile Money - Mynita" },
+  { key: "amanata", label: "Amanata",     desc: "Mobile Money - Amanata" },
+  { key: "usdt",    label: "USDT TRC20",  desc: "Crypto - reseau Tron (TRC20)" },
+  { key: "zcash",   label: "ZCash",       desc: "Mobile Money - ZCash" },
+];
+
+const TABS = [
+  { v: "maintenance",  icon: Wrench,        label: "Maintenance" },
+  { v: "announcement", icon: Megaphone,     label: "Bandeau" },
+  { v: "whatsapp",     icon: MessageCircle, label: "WhatsApp" },
+  { v: "payments",     icon: CreditCard,    label: "Paiements" },
+  { v: "featured",     icon: Flame,         label: "Hot Now" },
 ];
 
 export default function SettingsPage() {
@@ -104,27 +112,45 @@ export default function SettingsPage() {
       <PageHeader eyebrow="Configuration" title="Parametres" subtitle="// gestion globale" />
 
       <Tabs defaultValue="maintenance" className="space-y-6">
-        <TabsList className="rounded-none border-2 border-border bg-card p-0 h-auto flex-wrap justify-start">
-          {[
-            { v: "maintenance", icon: Wrench, label: "Maintenance" },
-            { v: "announcement", icon: Megaphone, label: "Bandeau" },
-            { v: "whatsapp", icon: MessageCircle, label: "WhatsApp" },
-            { v: "payments", icon: CreditCard, label: "Paiements" },
-            { v: "featured", icon: Flame, label: "Hot Now" },
-          ].map(({ v, icon: I, label }) => (
-            <TabsTrigger
-              key={v} value={v}
-              className="rounded-none mono uppercase tracking-wider text-xs px-4 py-2.5 border-r-2 border-border last:border-r-0 data-[state=active]:bg-primary data-[state=active]:text-primary-foreground"
-            >
-              <I className="h-3.5 w-3.5 mr-2" /> {label}
-            </TabsTrigger>
-          ))}
-        </TabsList>
 
+        {/* ── Tab bar : scrollable horizontalement sur mobile ── */}
+        <div className="relative overflow-hidden">
+          {/* Gradient droit = hint scroll */}
+          <div className="pointer-events-none absolute right-0 top-0 h-full w-8 bg-gradient-to-l from-background to-transparent z-10 sm:hidden" />
+          <TabsList
+            className="
+              w-full rounded-none border-2 border-border bg-card p-0 h-auto
+              flex flex-nowrap
+              overflow-x-auto
+              [scrollbar-width:none] [-ms-overflow-style:none]
+              [&::-webkit-scrollbar]:hidden
+            "
+          >
+            {TABS.map(({ v, icon: I, label }) => (
+              <TabsTrigger
+                key={v}
+                value={v}
+                className="
+                  shrink-0 rounded-none mono uppercase tracking-wider text-[11px]
+                  flex items-center gap-1.5
+                  px-3 py-3 sm:px-4
+                  border-r-2 border-border last:border-r-0
+                  data-[state=active]:bg-primary data-[state=active]:text-primary-foreground
+                  whitespace-nowrap
+                "
+              >
+                <I className="h-3.5 w-3.5 shrink-0" />
+                {label}
+              </TabsTrigger>
+            ))}
+          </TabsList>
+        </div>
+
+        {/* ── Maintenance ── */}
         <TabsContent value="maintenance">
-          <div className="brackets brut-card max-w-2xl p-6">
+          <div className="brackets brut-card max-w-2xl p-5 sm:p-6">
             <div className="flex items-start gap-4 mb-6">
-              <div className="h-10 w-10 border-2 border-destructive/40 bg-destructive-soft flex items-center justify-center text-destructive">
+              <div className="h-10 w-10 shrink-0 border-2 border-destructive/40 bg-destructive-soft flex items-center justify-center text-destructive">
                 <Wrench className="h-5 w-5" />
               </div>
               <div>
@@ -140,16 +166,17 @@ export default function SettingsPage() {
             </div>
             {maintenance && (
               <div className="mt-3 flex items-center gap-2 border-2 border-destructive/40 bg-destructive-soft p-3 text-xs text-destructive mono">
-                <AlertTriangle className="h-4 w-4" /> Boutique inaccessible aux visiteurs
+                <AlertTriangle className="h-4 w-4 shrink-0" /> Boutique inaccessible aux visiteurs
               </div>
             )}
           </div>
         </TabsContent>
 
+        {/* ── Bandeau ── */}
         <TabsContent value="announcement">
-          <div className="brackets brut-card max-w-2xl p-6 space-y-4">
+          <div className="brackets brut-card max-w-2xl p-5 sm:p-6 space-y-4">
             <div className="flex items-start gap-4">
-              <div className="h-10 w-10 border-2 border-warning/40 bg-warning-soft flex items-center justify-center text-warning">
+              <div className="h-10 w-10 shrink-0 border-2 border-warning/40 bg-warning-soft flex items-center justify-center text-warning">
                 <Megaphone className="h-5 w-5" />
               </div>
               <div>
@@ -157,24 +184,40 @@ export default function SettingsPage() {
                 <p className="text-sm text-muted-foreground">Bandeau informatif en haut du shop.</p>
               </div>
             </div>
-            <div className="flex items-center gap-3">
-              <Switch checked={announcement.enabled} onCheckedChange={(v) => setAnnouncement((a) => ({ ...a, enabled: v }))} />
-              <Label className="mono text-xs uppercase tracking-wider">Activer</Label>
+            <div className="border-2 border-border p-4 space-y-3">
+              <div className="flex items-center justify-between">
+                <Label className="mono text-xs uppercase tracking-wider">Activer le bandeau</Label>
+                <Switch
+                  checked={announcement.enabled}
+                  onCheckedChange={(v) => setAnnouncement((a) => ({ ...a, enabled: v }))}
+                />
+              </div>
+              <div>
+                <Label className="eyebrow mb-1.5 block text-[10px] text-muted-foreground">TEXTE DU BANDEAU</Label>
+                <Input
+                  value={announcement.text}
+                  onChange={(e) => setAnnouncement((a) => ({ ...a, text: e.target.value }))}
+                  disabled={!announcement.enabled}
+                  placeholder="Ex: Livraison gratuite ce weekend"
+                  className="rounded-none border-2 mono"
+                />
+              </div>
             </div>
-            <div>
-              <Label className="eyebrow mb-1.5 block" style={{ color: "hsl(var(--muted-foreground))" }}>Texte</Label>
-              <Input value={announcement.text} onChange={(e) => setAnnouncement((a) => ({ ...a, text: e.target.value }))} disabled={!announcement.enabled} placeholder="Ex: Livraison gratuite ce weekend" className="rounded-none border-2 mono" />
-            </div>
-            <Button onClick={saveAnnouncement} disabled={saving.a} className="rounded-none border-2 border-primary bg-primary text-primary-foreground mono uppercase tracking-wider hover:bg-primary/90">
+            <Button
+              onClick={saveAnnouncement}
+              disabled={saving.a}
+              className="w-full sm:w-auto rounded-none border-2 border-primary bg-primary text-primary-foreground mono uppercase tracking-wider hover:bg-primary/90 h-11"
+            >
               {saving.a ? "..." : "Enregistrer"}
             </Button>
           </div>
         </TabsContent>
 
+        {/* ── WhatsApp ── */}
         <TabsContent value="whatsapp">
-          <div className="brackets brut-card max-w-2xl p-6 space-y-4">
+          <div className="brackets brut-card max-w-2xl p-5 sm:p-6 space-y-4">
             <div className="flex items-start gap-4">
-              <div className="h-10 w-10 border-2 border-success/40 bg-success-soft flex items-center justify-center text-success">
+              <div className="h-10 w-10 shrink-0 border-2 border-success/40 bg-success-soft flex items-center justify-center text-success">
                 <MessageCircle className="h-5 w-5" />
               </div>
               <div>
@@ -183,59 +226,87 @@ export default function SettingsPage() {
               </div>
             </div>
             <div>
-              <Label className="eyebrow mb-1.5 block" style={{ color: "hsl(var(--muted-foreground))" }}>Numero (chiffres uniquement)</Label>
-              <Input value={whatsapp} onChange={(e) => setWhatsapp(e.target.value)} placeholder="22790000000" className="rounded-none border-2 mono" />
+              <Label className="eyebrow mb-1.5 block text-[10px] text-muted-foreground">NUMERO (CHIFFRES UNIQUEMENT)</Label>
+              <Input
+                value={whatsapp}
+                onChange={(e) => setWhatsapp(e.target.value)}
+                placeholder="22790000000"
+                className="rounded-none border-2 mono text-base h-12"
+                inputMode="numeric"
+              />
             </div>
-            <Button onClick={saveWhatsapp} disabled={saving.w} className="rounded-none border-2 border-primary bg-primary text-primary-foreground mono uppercase tracking-wider hover:bg-primary/90">
+            <Button
+              onClick={saveWhatsapp}
+              disabled={saving.w}
+              className="w-full sm:w-auto rounded-none border-2 border-primary bg-primary text-primary-foreground mono uppercase tracking-wider hover:bg-primary/90 h-11"
+            >
               {saving.w ? "..." : "Enregistrer"}
             </Button>
           </div>
         </TabsContent>
 
+        {/* ── Paiements ── */}
         <TabsContent value="payments">
-          <div className="space-y-4">
-            <div className="brackets brut-card p-6">
-              <div className="flex items-start gap-4 mb-5">
-                <div className="h-10 w-10 border-2 border-tertiary/40 bg-tertiary-soft flex items-center justify-center text-tertiary">
-                  <CreditCard className="h-5 w-5" />
-                </div>
-                <div>
-                  <h3 className="display text-xl mb-1">Modes de paiement</h3>
-                  <p className="text-sm text-muted-foreground">Activez et configurez les instructions par mode.</p>
-                </div>
+          <div className="brackets brut-card p-5 sm:p-6">
+            <div className="flex items-start gap-4 mb-5">
+              <div className="h-10 w-10 shrink-0 border-2 border-tertiary/40 bg-tertiary-soft flex items-center justify-center text-tertiary">
+                <CreditCard className="h-5 w-5" />
               </div>
+              <div>
+                <h3 className="display text-xl mb-1">Modes de paiement</h3>
+                <p className="text-sm text-muted-foreground">Activez et configurez les instructions par mode.</p>
+              </div>
+            </div>
 
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                {pms.map((m, idx) => (
-                  <div key={m.key} className="border-2 border-border p-4 space-y-3">
-                    <div className="flex items-start justify-between gap-3">
-                      <div className="min-w-0">
-                        <p className="display text-base">{m.label}</p>
-                        <p className="text-[10px] mono text-muted-foreground truncate">{m.desc}</p>
-                      </div>
-                      <Switch checked={m.enabled} onCheckedChange={(v) => setPms((arr) => arr.map((x, i) => i === idx ? { ...x, enabled: v } : x))} />
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              {pms.map((m, idx) => (
+                <div
+                  key={m.key}
+                  className={cn(
+                    "border-2 p-4 space-y-3 transition-opacity",
+                    m.enabled ? "border-border" : "border-border/40 opacity-55"
+                  )}
+                >
+                  <div className="flex items-center justify-between gap-3">
+                    <div className="min-w-0">
+                      <p className="display text-base leading-tight">{m.label}</p>
+                      <p className="text-[10px] mono text-muted-foreground truncate mt-0.5">{m.desc}</p>
                     </div>
-                    <Textarea
-                      rows={2}
-                      placeholder="Instructions paiement..."
-                      value={m.instructions}
-                      onChange={(e) => setPms((arr) => arr.map((x, i) => i === idx ? { ...x, instructions: e.target.value } : x))}
-                      disabled={!m.enabled}
-                      className="rounded-none border-2 mono text-xs"
+                    <Switch
+                      checked={m.enabled}
+                      onCheckedChange={(v) =>
+                        setPms((arr) => arr.map((x, i) => i === idx ? { ...x, enabled: v } : x))
+                      }
+                      className="shrink-0"
                     />
                   </div>
-                ))}
-              </div>
+                  <Textarea
+                    rows={2}
+                    placeholder="Instructions paiement..."
+                    value={m.instructions}
+                    onChange={(e) =>
+                      setPms((arr) => arr.map((x, i) => i === idx ? { ...x, instructions: e.target.value } : x))
+                    }
+                    disabled={!m.enabled}
+                    className="rounded-none border-2 mono text-xs resize-none"
+                  />
+                </div>
+              ))}
+            </div>
 
-              <div className="mt-5 pt-4 border-t-2 border-border">
-                <Button onClick={savePms} disabled={saving.p} className="rounded-none border-2 border-primary bg-primary text-primary-foreground mono uppercase tracking-wider hover:bg-primary/90">
-                  {saving.p ? "..." : "Enregistrer tout"}
-                </Button>
-              </div>
+            <div className="mt-5 pt-4 border-t-2 border-border">
+              <Button
+                onClick={savePms}
+                disabled={saving.p}
+                className="w-full sm:w-auto rounded-none border-2 border-primary bg-primary text-primary-foreground mono uppercase tracking-wider hover:bg-primary/90 h-11"
+              >
+                {saving.p ? "..." : "Enregistrer tout"}
+              </Button>
             </div>
           </div>
         </TabsContent>
 
+        {/* ── Hot Now ── */}
         <TabsContent value="featured">
           <FeaturedProductsManager />
         </TabsContent>
