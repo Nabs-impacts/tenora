@@ -133,14 +133,14 @@ def redirect_to_whatsapp(
 
     has_screenshot = bool(import_req.screenshot_path)
     message = (
-        f"Bonjour {settings.APP_NAME} !\n\n"
-        f"Je souhaite commander depuis {cat_name}\n\n"
-        f"Lien article : {import_req.article_url}\n"
-        f"Description : {import_req.article_description or 'Non précisée'}\n"
-        f"Référence : #{import_req.id}\n\n"
-        + ("Capture jointe côté panel admin.\n\n" if has_screenshot
-           else "Je joins la capture à ce message.\n\n")
-        + "Merci !"
+        f"👋 Bonjour {settings.APP_NAME} !\n\n"
+        f"Je souhaite passer une commande via votre service pour le site {cat_name}\n\n"
+        "🛒 *Détails de ma demande*\n\n"
+        f"• Lien article : {import_req.article_url}\n"
+        f"• Description : {import_req.article_description or 'Non précisée'}\n"
+        f"• Référence : #{import_req.id}\n\n"
+        "Merci d'avance pour votre retour rapide !\n\n"
+        "— Envoyé depuis Tenora."
     )
 
     encoded_message = urllib.parse.quote(message)

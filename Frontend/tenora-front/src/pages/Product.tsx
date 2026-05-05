@@ -469,7 +469,7 @@ export default function ProductPage() {
                     <div className={cn("border-2 border-dashed p-6 text-center", file ? "border-primary bg-primary/5" : "border-border")}>
                       <Upload className="size-6 mx-auto text-muted-foreground mb-2" />
                       <p className="text-sm font-medium">{file ? file.name : "Cliquez pour choisir une capture"}</p>
-                      <p className="text-xs text-muted-foreground mt-1">PNG ou JPG, max ~5MB</p>
+                      <p className="text-xs text-muted-foreground mt-1">PNG ou JPG, max ~10MB</p>
                     </div>
                   </div>
                 </div>

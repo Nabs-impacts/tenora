@@ -199,7 +199,7 @@ export function PaymentInstructions({
             <CopyButton value={amountFormatted} accent={accent} />
           </div>
           <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground font-mono mt-3 pt-2 border-t border-border">
-            Mentionne <span style={accent ? { color: accent } : undefined} className="text-foreground font-display text-sm">#{orderId}</span> dans ta note de paiement
+            Mentionne <span style={accent ? { color: accent } : undefined} className="text-foreground font-display text-sm">#{orderId}</span> dans ta note de paiement et veilles payer a tes frais
           </p>
         </div>
 
