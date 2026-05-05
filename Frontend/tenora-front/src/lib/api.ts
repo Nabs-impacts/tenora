@@ -4,8 +4,14 @@
 import axios, { AxiosError } from "axios";
 import { toast } from "sonner";
 
+// Normalise la baseURL : on retire un eventuel slash final pour eviter les
+// URLs en `//imports/...` quand on concatène manuellement (WhatsApp, downloads).
+// FastAPI traite `//imports/4/whatsapp` comme une route inconnue → 404 Not Found.
+const RAW_BASE = import.meta.env.VITE_API_URL || "http://127.0.0.1:8000";
+const BASE_URL = RAW_BASE.replace(/\/+$/, "");
+
 const api = axios.create({
-  baseURL: import.meta.env.VITE_API_URL || "http://127.0.0.1:8000",
+  baseURL: BASE_URL,
   withCredentials: true,
   headers: { "Content-Type": "application/json" },
   timeout: 15000,
@@ -209,7 +215,7 @@ export const productsApi = {
   getProduct: (id: number) => api.get<Product>(`/products/${id}`),
   search: (q: string) => api.get<Product[]>("/products/search", { params: { q } }),
   getWhatsappLink: (productId: number, params: URLSearchParams) =>
-    `${api.defaults.baseURL}/products/${productId}/whatsapp?${params.toString()}`,
+    `${BASE_URL}/products/${productId}/whatsapp?${params.toString()}`,
 };
 
 export const ordersApi = {
@@ -255,7 +261,7 @@ export const importsApi = {
     });
   },
   myRequests: () => api.get<ImportRequest[]>("/imports/my"),
-  getWhatsappLink: (requestId: number) => `${api.defaults.baseURL}/imports/${requestId}/whatsapp`,
+  getWhatsappLink: (requestId: number) => `${BASE_URL}/imports/${requestId}/whatsapp`,
 };
 
 export interface Ebook {
@@ -274,9 +280,9 @@ export interface Ebook {
 
 export const ebooksApi = {
   list: () => api.get<Ebook[]>("/ebooks/"),
-  downloadUrl: (id: number) => `${api.defaults.baseURL}/ebooks/${id}/download`,
+  downloadUrl: (id: number) => `${BASE_URL}/ebooks/${id}/download`,
   download: (id: number) =>
-    fetch(`${api.defaults.baseURL}/ebooks/${id}/download`, { credentials: "include" }),
+    fetch(`${BASE_URL}/ebooks/${id}/download`, { credentials: "include" }),
 };
 
 export const siteApi = {
@@ -287,9 +293,8 @@ export const siteApi = {
 export function resolveAssetUrl(path: string | null | undefined) {
   if (!path) return "";
   if (path.startsWith("http")) return path;
-  const base = api.defaults.baseURL || "";
-  if (path.startsWith("/uploads/")) return `${base}${path}`;
-  return `${base}/uploads/${path}`;
+  if (path.startsWith("/uploads/")) return `${BASE_URL}${path}`;
+  return `${BASE_URL}/uploads/${path}`;
 }
 
 export default api;

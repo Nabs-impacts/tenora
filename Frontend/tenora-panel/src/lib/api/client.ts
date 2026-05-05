@@ -1,8 +1,14 @@
 import axios from "axios";
 import { toast } from "sonner";
 
+// On retire un slash final éventuel sur VITE_API_URL : sinon les endpoints
+// concaténés à la main (WhatsApp, downloads…) deviennent `//imports/...`,
+// ce que FastAPI renvoie en 404 Not Found.
+const RAW_BASE = import.meta.env.VITE_API_URL || "http://localhost:8000";
+const BASE_URL = RAW_BASE.replace(/\/+$/, "");
+
 const api = axios.create({
-  baseURL: import.meta.env.VITE_API_URL || "http://localhost:8000",
+  baseURL: BASE_URL,
   withCredentials: true,
   headers: { "Content-Type": "application/json" },
   timeout: 15000,
