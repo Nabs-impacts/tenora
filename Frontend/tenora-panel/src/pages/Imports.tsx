@@ -60,7 +60,7 @@ export default function Imports() {
   const fetchImports = useCallback(async () => {
     setLoading(true);
     try {
-      const { data } = await getImports(statusFilter !== "all" ? statusFilter : undefined);
+      const { data } = await getImports(statusFilter !== "all" ? { status: statusFilter } : undefined);
       setItems(Array.isArray(data) ? data : data?.imports || []);
     } catch (e) {
       console.error(e);
@@ -84,7 +84,7 @@ export default function Imports() {
     if (!selected) return;
     setUpdating(true);
     try {
-      await updateImportStatus(selected.id, { status: editStatus, staff_note: staffNote });
+      await updateImportStatus(selected.id, editStatus, staffNote);
       setItems(items.map((i) => i.id === selected.id ? { ...i, status: editStatus, staff_note: staffNote } : i));
       setSelected({ ...selected, status: editStatus, staff_note: staffNote });
       toast.success("Statut mis a jour");

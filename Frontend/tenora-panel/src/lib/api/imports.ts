@@ -36,7 +36,7 @@ export async function getImports(params?: Record<string, any>) {
 // STATUS UPDATE  (celui qui manquait au build)
 // ---------------------------------------------------------------------------
 export async function updateImportStatus(id: string | number, status: string, note?: string) {
-  return api.patch(`/panel/imports/${id}/status`, { status, note });
+  return api.put(`/panel/imports/${id}/status`, { status, note });
 }
 
 // ---------------------------------------------------------------------------
