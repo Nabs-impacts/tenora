@@ -1,6 +1,9 @@
 import { useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
-import { Download, ChevronRight, ShoppingCart, ExternalLink } from "lucide-react";
+import {
+  Download, ChevronRight, ShoppingCart, ExternalLink,
+  Phone, Mail, MessageCircle, Copy, MapPin, User as UserIcon, Info,
+} from "lucide-react";
 import { PageHeader } from "@/components/panel/PageHeader";
 import { StatusBadge } from "@/components/panel/StatusBadge";
 import { DataCard, DataCardHeader, DataCardContent } from "@/components/panel/DataCard";
@@ -24,7 +27,7 @@ interface Order {
   quantity: number; total_price: number; status: string;
   payment_method: string; created_at: string;
   notes?: string; staff_note?: string; screenshot_path?: string;
-  customer_info?: { delivery_name?: string; delivery_phone?: string; delivery_address?: string; };
+  customer_info?: Record<string, string> | null;
   claim?: OrderClaim | null;
 }
 
@@ -44,6 +47,44 @@ const screenshotUrl = (path?: string) => {
   const base = (api.defaults.baseURL || "").replace(/\/$/, "");
   return `${base}/uploads/${path}`;
 };
+
+/* ───────────────── Helpers customer_info ───────────────── */
+
+const prettifyKey = (k: string) =>
+  k.replace(/[_\-]+/g, " ")
+    .replace(/([a-z])([A-Z])/g, "$1 $2")
+    .replace(/\s+/g, " ")
+    .trim()
+    .replace(/\b\w/g, (c) => c.toUpperCase());
+
+type FieldKind = "phone" | "email" | "address" | "name" | "url" | "text";
+
+const detectKind = (key: string, value: string): FieldKind => {
+  const k = key.toLowerCase();
+  const v = (value || "").trim();
+  if (/^https?:\/\//i.test(v)) return "url";
+  if (/mail/.test(k) || /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v)) return "email";
+  if (/(phone|tel|whats|mobile|gsm|numero|num$)/.test(k) || /^[+\d][\d\s().\-]{6,}$/.test(v)) return "phone";
+  if (/(addr|adresse|ville|city|pays|country|location|livraison)/.test(k)) return "address";
+  if (/(name|nom|prenom|client|user)/.test(k)) return "name";
+  return "text";
+};
+
+const KindIcon = ({ kind }: { kind: FieldKind }) => {
+  const cls = "h-3.5 w-3.5";
+  switch (kind) {
+    case "phone":   return <Phone className={cls} />;
+    case "email":   return <Mail className={cls} />;
+    case "address": return <MapPin className={cls} />;
+    case "name":    return <UserIcon className={cls} />;
+    case "url":     return <ExternalLink className={cls} />;
+    default:        return <Info className={cls} />;
+  }
+};
+
+const sanitizePhone = (v: string) => v.replace(/[^\d+]/g, "");
+
+/* ───────────────── Composant ───────────────── */
 
 export default function Orders() {
   const qc = useQueryClient();
@@ -102,6 +143,10 @@ export default function Orders() {
       toast.error("Erreur export");
     }
   };
+
+  const customerEntries = selected?.customer_info
+    ? Object.entries(selected.customer_info).filter(([, v]) => v !== null && v !== undefined && String(v).trim() !== "")
+    : [];
 
   return (
     <div className="space-y-6 animate-fade-up">
@@ -238,19 +283,48 @@ export default function Orders() {
                 <Field label="Créé le" value={new Date(selected.created_at).toLocaleString("fr-FR")} />
               </div>
 
-              {selected.customer_info && (
-                <div className="brackets brut-card p-4 space-y-2">
-                  <p className="eyebrow">// Livraison</p>
-                  {selected.customer_info.delivery_name && <p className="text-sm">{selected.customer_info.delivery_name}</p>}
-                  {selected.customer_info.delivery_phone && <p className="text-xs mono text-muted-foreground">{selected.customer_info.delivery_phone}</p>}
-                  {selected.customer_info.delivery_address && <p className="text-xs text-muted-foreground">{selected.customer_info.delivery_address}</p>}
+              {/* ───── Infos client (dynamiques) ───── */}
+              <div className="brackets brut-card p-4 space-y-3">
+                <div className="flex items-center justify-between">
+                  <p className="eyebrow">// Infos client</p>
+                  {customerEntries.length > 0 && (
+                    <span className="chip border-border text-[10px]">
+                      {customerEntries.length} champ{customerEntries.length > 1 ? "s" : ""}
+                    </span>
+                  )}
                 </div>
-              )}
+
+                {customerEntries.length === 0 ? (
+                  <div className="flex items-start gap-2 p-3 border-2 border-dashed border-border bg-muted/20">
+                    <MessageCircle className="h-4 w-4 mt-0.5 text-muted-foreground shrink-0" />
+                    <p className="text-xs text-muted-foreground leading-relaxed">
+                      Aucune information saisie par le client pour cette commande.
+                      Le contact se fait directement par e-mail{" "}
+                      <span className="mono text-foreground">{selected.user_email}</span>.
+                    </p>
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                    {customerEntries.map(([key, raw]) => {
+                      const value = String(raw);
+                      const kind = detectKind(key, value);
+                      return (
+                        <CustomerField
+                          key={key}
+                          label={prettifyKey(key)}
+                          value={value}
+                          kind={kind}
+                        />
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
 
               {selected.notes && (
                 <div className="brackets brut-card p-4">
                   <p className="eyebrow mb-2">// Note client</p>
-                  <p className="text-sm">{selected.notes}</p>
+                  <p className="text-sm whitespace-pre-wrap break-words">{selected.notes}</p>
                 </div>
               )}
 
@@ -277,6 +351,93 @@ function Field({ label, value, highlight }: { label: string; value?: string; hig
       <p className={cn("mono break-words", highlight ? "text-primary font-bold text-sm" : "text-foreground text-xs")}>
         {value || "--"}
       </p>
+    </div>
+  );
+}
+
+/* ───────────────── Carte champ client ───────────────── */
+
+function CustomerField({
+  label, value, kind,
+}: { label: string; value: string; kind: FieldKind }) {
+  const copy = async () => {
+    try {
+      await navigator.clipboard.writeText(value);
+      toast.success("Copié");
+    } catch {
+      toast.error("Impossible de copier");
+    }
+  };
+
+  const phoneDigits = kind === "phone" ? sanitizePhone(value) : "";
+  const waNumber = phoneDigits.replace(/^\+/, "");
+
+  return (
+    <div className="border-2 border-border p-2.5 min-w-0 flex flex-col gap-1.5 group hover:border-foreground transition-colors">
+      <div className="flex items-center gap-1.5 text-muted-foreground">
+        <KindIcon kind={kind} />
+        <p className="eyebrow truncate" style={{ color: "hsl(var(--muted-foreground))" }}>
+          {label}
+        </p>
+      </div>
+
+      <p className="mono text-xs sm:text-sm text-foreground break-words leading-snug select-text">
+        {value}
+      </p>
+
+      <div className="flex flex-wrap items-center gap-1.5 mt-1">
+        {kind === "phone" && phoneDigits && (
+          <>
+            <a
+              href={`tel:${phoneDigits}`}
+              className="inline-flex items-center gap-1 px-2 py-1 border-2 border-border mono text-[10px] uppercase tracking-wider hover:border-foreground hover:bg-foreground hover:text-background transition-colors"
+            >
+              <Phone className="h-3 w-3" /> Appeler
+            </a>
+            <a
+              href={`https://wa.me/${waNumber}`}
+              target="_blank" rel="noreferrer"
+              className="inline-flex items-center gap-1 px-2 py-1 border-2 border-border mono text-[10px] uppercase tracking-wider hover:border-foreground hover:bg-foreground hover:text-background transition-colors"
+            >
+              <MessageCircle className="h-3 w-3" /> WhatsApp
+            </a>
+          </>
+        )}
+        {kind === "email" && (
+          <a
+            href={`mailto:${value}`}
+            className="inline-flex items-center gap-1 px-2 py-1 border-2 border-border mono text-[10px] uppercase tracking-wider hover:border-foreground hover:bg-foreground hover:text-background transition-colors"
+          >
+            <Mail className="h-3 w-3" /> Écrire
+          </a>
+        )}
+        {kind === "address" && (
+          <a
+            href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(value)}`}
+            target="_blank" rel="noreferrer"
+            className="inline-flex items-center gap-1 px-2 py-1 border-2 border-border mono text-[10px] uppercase tracking-wider hover:border-foreground hover:bg-foreground hover:text-background transition-colors"
+          >
+            <MapPin className="h-3 w-3" /> Maps
+          </a>
+        )}
+        {kind === "url" && (
+          <a
+            href={value}
+            target="_blank" rel="noreferrer"
+            className="inline-flex items-center gap-1 px-2 py-1 border-2 border-border mono text-[10px] uppercase tracking-wider hover:border-foreground hover:bg-foreground hover:text-background transition-colors"
+          >
+            <ExternalLink className="h-3 w-3" /> Ouvrir
+          </a>
+        )}
+        <button
+          type="button"
+          onClick={copy}
+          className="inline-flex items-center gap-1 px-2 py-1 border-2 border-border mono text-[10px] uppercase tracking-wider hover:border-foreground hover:bg-foreground hover:text-background transition-colors ml-auto"
+          aria-label={`Copier ${label}`}
+        >
+          <Copy className="h-3 w-3" /> Copier
+        </button>
+      </div>
     </div>
   );
 }
