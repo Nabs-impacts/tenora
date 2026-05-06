@@ -1,18 +1,6 @@
 // Tenora — PaymentLogo
-// Composant unifié pour afficher le logo d'un moyen de paiement dans un cadre
-// dont la couleur de fond s'adapte exactement à celle du logo SVG, afin que
-// le logo "remplisse" visuellement le cadre sans trou ni bord parasite.
-//
-// Robustesse :
-//  - Les SVG sont importés via Vite (URL hashée → pas de souci de casse / déploiement).
-//  - Le `methodId` envoyé par le backend est normalisé (minuscule, sans accents,
-//    sans espaces / underscores / tirets) puis mappé via une table d'alias.
-//  - Si l'ID est inconnu, on tente une heuristique sur le `name` lisible.
-//  - Dernier recours : carré neutre avec l'initiale.
 import { cn } from "@/lib/utils";
 
-// On référence les SVG depuis `public/icons/` via des chemins absolus —
-// Vercel/Vite les sert tels quels (pas d'import module → pas de mauvaise URL).
 type Variant = "tile" | "badge" | "thumb";
 
 interface PaymentBrand {
@@ -27,13 +15,14 @@ interface PaymentBrand {
 const BRANDS: Record<string, PaymentBrand> = {
   wave:    { src: "/icons/wave.svg",        bg: "#1CC7FE", accent: "#1CC7FE", fullBleed: true },
   airtel:  { src: "/icons/airtelMoney.svg", bg: "#FFFFFF", accent: "#E40914", fullBleed: true },
-  mynita:  { src: "/icons/Mynita.svg",      bg: "#FFFFFF", accent: "#0F172A", fullBleed: true },
-  amanata: { src: "/icons/Amanata.svg",     bg: "#FFFFFF", accent: "#0F172A", fullBleed: true },
+  // Mynita → orange signature
+  mynita:  { src: "/icons/Mynita.svg",      bg: "#FFFFFF", accent: "#F58220", fullBleed: true },
+  // Amanata → vert vegetal signature
+  amanata: { src: "/icons/Amanata.svg",     bg: "#FFFFFF", accent: "#3CB371", fullBleed: true },
   zcash:   { src: "/icons/Zcash.svg",       bg: "#FEE715", accent: "#F4B728", fullBleed: true },
   usdt:    { bg: "#26A17B", accent: "#26A17B", fallback: { glyph: "₮", color: "#FFFFFF" } },
 };
 
-// Alias : tout ce que le backend (ou un admin) pourrait écrire → clé canonique.
 const ALIASES: Record<string, keyof typeof BRANDS> = {
   wave: "wave",
   wavemoney: "wave",
@@ -57,8 +46,8 @@ function normalize(s: string): string {
   return (s || "")
     .toLowerCase()
     .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "") // accents
-    .replace(/[^a-z0-9]/g, "");      // espaces, _, -, …
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^a-z0-9]/g, "");
 }
 
 function resolveBrand(methodId: string, name: string): PaymentBrand | undefined {
@@ -70,7 +59,6 @@ function resolveBrand(methodId: string, name: string): PaymentBrand | undefined 
   if (ALIASES[nameKey]) return BRANDS[ALIASES[nameKey]];
   if (BRANDS[nameKey]) return BRANDS[nameKey];
 
-  // heuristique : sous-chaîne
   for (const k of Object.keys(ALIASES)) {
     if (idKey.includes(k) || nameKey.includes(k)) return BRANDS[ALIASES[k]];
   }

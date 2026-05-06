@@ -85,7 +85,10 @@ export default function ProductPage() {
   }
 
   const basePrice = product.final_price ?? product.price;
-  const finalTotal = coupon ? coupon.final_total : basePrice;
+  // Le backend renvoie `final_price` ; on garde un fallback local pour eviter NaN.
+  const finalTotal = coupon
+    ? (coupon.final_total ?? coupon.final_price ?? Math.max(0, basePrice - (coupon.discount_amount || 0)))
+    : basePrice;
 
   const validateFields = () => {
     if (!product.required_fields) return true;
@@ -121,7 +124,7 @@ export default function ProductPage() {
         quantity: 1,
       });
       if (!r.data.valid) {
-        setCouponError(r.data.message || "Code promo invalide.");
+        setCouponError(r.data.reason || r.data.message || "Code promo invalide.");
         setCoupon(null);
       } else {
         setCoupon(r.data);
@@ -218,7 +221,6 @@ export default function ProductPage() {
             )}
           </div>
 
-          {/* Badges produit */}
           <div className="grid grid-cols-3 gap-2 mt-3">
             <div className="flex flex-col items-center gap-1.5 border-2 border-success/50 bg-success/10 px-2 py-2.5 text-center">
               <Check className="size-4 text-success" strokeWidth={2.5} />
@@ -299,7 +301,6 @@ export default function ProductPage() {
                   </div>
                 )}
 
-                {/* ─── Coupon (avant le paiement) ────────────── */}
                 {!product.whatsapp_redirect && (
                   <div className="space-y-2">
                     <div className="flex items-center gap-2 pb-2 border-b-2 border-border">
@@ -377,7 +378,7 @@ export default function ProductPage() {
                     <div className="grid grid-cols-3 sm:grid-cols-4 gap-2">
                       {paymentMethods.map((m) => {
                         const active = paymentMethod === m.id;
-                        const accent = getPaymentAccent(m.id);
+                        const accent = getPaymentAccent(m.id, m.name);
                         return (
                           <button
                             key={m.id}
@@ -413,7 +414,6 @@ export default function ProductPage() {
                   </div>
                 )}
 
-                {/* Recap total si un coupon est applique */}
                 {coupon && !product.whatsapp_redirect && (
                   <div className="border-t border-border pt-3 space-y-1 text-sm">
                     <div className="flex justify-between text-muted-foreground">
@@ -469,7 +469,7 @@ export default function ProductPage() {
                     <div className={cn("border-2 border-dashed p-6 text-center", file ? "border-primary bg-primary/5" : "border-border")}>
                       <Upload className="size-6 mx-auto text-muted-foreground mb-2" />
                       <p className="text-sm font-medium">{file ? file.name : "Cliquez pour choisir une capture"}</p>
-                      <p className="text-xs text-muted-foreground mt-1">PNG ou JPG, max ~10MB</p>
+                      <p className="text-xs text-muted-foreground mt-1">PNG ou JPG, max ~5MB</p>
                     </div>
                   </div>
                 </div>

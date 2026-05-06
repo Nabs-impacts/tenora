@@ -1,12 +1,8 @@
 // Frontend/tenora-front/src/lib/api.ts
 // Tenora API client — port React du fichier src/api/index.ts d'origine.
-// La logique HTTP reste strictement identique au backend (memes endpoints, memes payloads).
 import axios, { AxiosError } from "axios";
 import { toast } from "sonner";
 
-// Normalise la baseURL : on retire un eventuel slash final pour eviter les
-// URLs en `//imports/...` quand on concatène manuellement (WhatsApp, downloads).
-// FastAPI traite `//imports/4/whatsapp` comme une route inconnue → 404 Not Found.
 const RAW_BASE = import.meta.env.VITE_API_URL || "http://127.0.0.1:8000";
 const BASE_URL = RAW_BASE.replace(/\/+$/, "");
 
@@ -170,21 +166,23 @@ export interface SiteInit {
   announcement: { enabled: boolean; text: string };
   payment_methods: PaymentMethod[];
   whatsapp_number: string;
-  /** IDs des produits mis en avant (section "Hot Now" sur la home),
-   *  configures dans le panel admin via la cle de settings `featured_product_ids`. */
   featured_product_ids: number[];
 }
 
 // ─── Coupons ───────────────────────────────────────────────
+// NOTE: Le backend renvoie `final_price` (et `reason` en cas d'erreur).
+// On garde `final_total` / `message` en alias optionnels pour compat retro.
 export interface CouponValidation {
   valid: boolean;
   code: string;
   discount_type: "percent" | "amount";
   discount_value: number;
-  /** Montant de la reduction applique sur la commande courante. */
+  /** Montant de la reduction appliquee sur la commande courante. */
   discount_amount: number;
-  /** Total apres reduction. */
-  final_total: number;
+  /** Total apres reduction (alias backend = final_price). */
+  final_total?: number;
+  final_price?: number;
+  reason?: string | null;
   message?: string | null;
 }
 
@@ -201,21 +199,18 @@ export const authApi = {
     api.put<User>("/auth/profile", data),
 };
 
-
 export const productsApi = {
   getCategoriesTree: () => api.get<CategoryTree[]>("/products/categories/tree"),
   getProductsByCategory: (categoryId: number) =>
     api.get<Product[]>(`/products/categories/${categoryId}/products`),
   getShopProducts: (params?: { category_id?: number; q?: string; sort?: string }) =>
     api.get<Product[]>("/products/shop", { params }),
-  /** Recupere plusieurs produits actifs en une requete. Utilise pour la
-   *  section "Hot Now" : on passe les IDs renvoyes par /site/init. */
   getByIds: (ids: number[]) =>
     api.get<Product[]>("/products/by-ids", { params: { ids: ids.join(",") } }),
   getProduct: (id: number) => api.get<Product>(`/products/${id}`),
   search: (q: string) => api.get<Product[]>("/products/search", { params: { q } }),
   getWhatsappLink: (productId: number, params: URLSearchParams) =>
-    `${BASE_URL}/products/${productId}/whatsapp?${params.toString()}`,
+    `${api.defaults.baseURL}/products/${productId}/whatsapp?${params.toString()}`,
 };
 
 export const ordersApi = {
@@ -224,7 +219,6 @@ export const ordersApi = {
     quantity: number;
     customer_info?: Record<string, string>;
     payment_method: string;
-    /** Code promo optionnel — valide cote backend. */
     coupon_code?: string;
   }) => api.post<Order>("/orders/", data),
   uploadScreenshot: (orderId: number, file: File) => {
@@ -239,9 +233,6 @@ export const ordersApi = {
 };
 
 export const couponsApi = {
-  /** Valide un code promo cote backend pour un produit/quantite donnes.
-   *  Retourne le montant de la reduction calcule + total final.
-   *  Aucune mutation cote backend (idempotent), donc OK a appeler depuis l'UI. */
   validate: (data: { code: string; product_id: number; quantity?: number }) =>
     api.post<CouponValidation>("/coupons/validate", {
       code: data.code,
@@ -261,7 +252,7 @@ export const importsApi = {
     });
   },
   myRequests: () => api.get<ImportRequest[]>("/imports/my"),
-  getWhatsappLink: (requestId: number) => `${BASE_URL}/imports/${requestId}/whatsapp`,
+  getWhatsappLink: (requestId: number) => `${api.defaults.baseURL}/imports/${requestId}/whatsapp`,
 };
 
 export interface Ebook {
@@ -280,25 +271,24 @@ export interface Ebook {
 
 export const ebooksApi = {
   list: () => api.get<Ebook[]>("/ebooks/"),
-  downloadUrl: (id: number) => `${BASE_URL}/ebooks/${id}/download`,
+  downloadUrl: (id: number) => `${api.defaults.baseURL}/ebooks/${id}/download`,
   download: (id: number) =>
-    fetch(`${BASE_URL}/ebooks/${id}/download`, { credentials: "include" }),
+    fetch(`${api.defaults.baseURL}/ebooks/${id}/download`, { credentials: "include" }),
 };
 
 export const siteApi = {
   getInit: () => api.get<SiteInit>("/site/init"),
 };
 
-// Helper d'URL d'images (uploads backend)
 export function resolveAssetUrl(path: string | null | undefined) {
   if (!path) return "";
   if (path.startsWith("http")) return path;
-  if (path.startsWith("/uploads/")) return `${BASE_URL}${path}`;
-  return `${BASE_URL}/uploads/${path}`;
+  const base = api.defaults.baseURL || "";
+  if (path.startsWith("/uploads/")) return `${base}${path}`;
+  return `${base}/uploads/${path}`;
 }
 
 export default api;
 
-// Helpers UI
 export const formatXOF = (n: number) =>
   new Intl.NumberFormat("fr-FR").format(Math.round(n)) + " FCFA";
