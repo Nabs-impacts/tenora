@@ -5,6 +5,7 @@
 .idea/
 *.swp
 .github/
+BravoApiKey.txt
 
 # --- Environnements & Secrets (CRITIQUE) ---
 .env
