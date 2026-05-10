@@ -79,8 +79,8 @@ const steps = [
 ];
 
 const tickerItems = [
-  "Livraison < 2 min",
-  "Paiement Mynita,Amanata,Mobile Money & crypto",
+  "Livraison Tres rapide",
+  "Paiement Mynita Amanata Mobile-Money & crypto",
   "Support WhatsApp 24/7",
   "+500 clients satisfaits",
   "Note 4.9 / 5",
@@ -144,7 +144,7 @@ export default function Home() {
               </span>
             </div>
             <span className="hidden sm:inline-flex items-center gap-1 text-[10px] font-bold uppercase tracking-widest text-muted-foreground font-mono">
-              <span className="text-secondary">//</span> v.2026.04
+              <span className="text-secondary">//</span> v.2026.05
             </span>
           </div>
 
@@ -168,19 +168,6 @@ export default function Home() {
                   <span className="size-3 bg-primary group-hover:bg-background animate-blink" />
                 </div>
               </Link>
-              {/* CTA secondaire — WhatsApp */}
-              {wa && (
-                <a
-                  href={waUrl}
-                  target="_blank"
-                  rel="noopener"
-                  className="text-xs uppercase tracking-widest font-bold text-muted-foreground hover:text-foreground inline-flex items-center gap-2 transition-colors group"
-                >
-                  <MessageCircle className="size-4 text-whatsapp" />
-                  Aide ? Écris-nous sur WhatsApp
-                  <ArrowUpRight className="size-3.5 group-hover:translate-x-0.5 group-hover:-translate-y-0.5 transition-transform" />
-                </a>
-              )}
             </div>
           </div>
 
