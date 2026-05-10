@@ -35,15 +35,7 @@ interface Category {
   image_path?: string;
   product_count?: number;
   parent_id?: number | null;
-  service_type?: string;
 }
-
-const SERVICE_TYPES = [
-  { value: "none",     label: "Aucun" },
-  { value: "ebook",    label: "Ebook (PDF)" },
-  { value: "physical", label: "Produit physique" },
-  { value: "digital",  label: "Service numérique" },
-];
 
 const empty = {
   name: "",
@@ -51,7 +43,6 @@ const empty = {
   description: "",
   is_active: true,
   parent_id: "none" as string,    // "none" = pas de parent
-  service_type: "none" as string,
 };
 
 const slugify = (s: string) => s.toLowerCase().trim().normalize("NFD")
@@ -130,7 +121,6 @@ export default function Categories() {
       description: c.description || "",
       is_active: c.is_active,
       parent_id: c.parent_id ? String(c.parent_id) : "none",
-      service_type: c.service_type || "none",
     });
     setSlugManual(true);
     setPendingImage(null);
@@ -166,7 +156,6 @@ export default function Categories() {
         slug: form.slug,
         description: form.description || null,
         is_active: form.is_active,
-        service_type: form.service_type,
         parent_id: form.parent_id === "none" ? null : Number(form.parent_id),
       };
       if (editing) {
@@ -256,11 +245,6 @@ export default function Categories() {
                       <span className="chip border-tertiary/40 text-tertiary bg-tertiary-soft">
                         {c.product_count ?? 0} produits
                       </span>
-                      {c.service_type && c.service_type !== "none" && (
-                        <span className="chip border-border text-muted-foreground">
-                          {c.service_type}
-                        </span>
-                      )}
                     </div>
                     <div className="flex items-center gap-1">
                       <Button size="icon" variant="ghost" className="h-7 w-7 rounded-none hover:bg-primary hover:text-primary-foreground" onClick={() => openEdit(c)}>
@@ -295,34 +279,19 @@ export default function Categories() {
               <Input value={form.slug} onChange={(e) => { setSlugManual(true); setForm({ ...form, slug: e.target.value }); }} className="rounded-none border-2 mono" />
             </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              <div>
-                <Label className="eyebrow mb-1.5 block" style={{ color: "hsl(var(--muted-foreground))" }}>
-                  Catégorie parente
-                </Label>
-                <Select value={form.parent_id} onValueChange={(v) => setForm({ ...form, parent_id: v })}>
-                  <SelectTrigger className="rounded-none border-2 mono"><SelectValue /></SelectTrigger>
-                  <SelectContent className="rounded-none border-2">
-                    <SelectItem value="none">— Aucune (racine) —</SelectItem>
-                    {parentChoices.map((c) => (
-                      <SelectItem key={c.id} value={String(c.id)}>{c.name}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-              <div>
-                <Label className="eyebrow mb-1.5 block" style={{ color: "hsl(var(--muted-foreground))" }}>
-                  Type de service
-                </Label>
-                <Select value={form.service_type} onValueChange={(v) => setForm({ ...form, service_type: v })}>
-                  <SelectTrigger className="rounded-none border-2 mono"><SelectValue /></SelectTrigger>
-                  <SelectContent className="rounded-none border-2">
-                    {SERVICE_TYPES.map((s) => (
-                      <SelectItem key={s.value} value={s.value}>{s.label}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
+            <div>
+              <Label className="eyebrow mb-1.5 block" style={{ color: "hsl(var(--muted-foreground))" }}>
+                Catégorie parente
+              </Label>
+              <Select value={form.parent_id} onValueChange={(v) => setForm({ ...form, parent_id: v })}>
+                <SelectTrigger className="rounded-none border-2 mono"><SelectValue /></SelectTrigger>
+                <SelectContent className="rounded-none border-2">
+                  <SelectItem value="none">— Aucune (racine) —</SelectItem>
+                  {parentChoices.map((c) => (
+                    <SelectItem key={c.id} value={String(c.id)}>{c.name}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
 
             <div>

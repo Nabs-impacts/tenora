@@ -3,6 +3,8 @@ from typing import Any
 
 from pydantic import BaseModel, ConfigDict, field_validator
 
+from app.services.storage_service import get_display_url
+
 
 class FieldDefinition(BaseModel):
     key: str
@@ -36,8 +38,8 @@ class CategoryResponse(BaseModel):
     @classmethod
     def from_orm_with_url(cls, obj, base_url: str) -> "CategoryResponse":
         data = cls.model_validate(obj)
-        if obj.image_path:
-            data.image_url = f"{base_url}/uploads/{obj.image_path}"
+        # ✅ Compatible R2 (URL absolue) ET local (chemin relatif)
+        data.image_url = get_display_url(obj.image_path, base_url)
         return data
 
 
@@ -85,9 +87,9 @@ class ProductResponse(BaseModel):
                            review_count: int = 0,
                            fallback_image: str | None = None) -> "ProductResponse":
         data = cls.model_validate(obj)
-        # Image produit en priorité, sinon image de la catégorie en fallback
+        # ✅ Image produit (R2 ou local) en priorité, sinon fallback catégorie
         if obj.image_path:
-            data.image_url = f"{base_url}/uploads/{obj.image_path}"
+            data.image_url = get_display_url(obj.image_path, base_url)
         elif fallback_image:
             data.image_url = fallback_image
         discount = getattr(obj, "discount_percent", None)

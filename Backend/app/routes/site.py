@@ -14,6 +14,7 @@ from app.services.settings_service import (
     DEFAULT_PAYMENT_METHODS,
     get_setting,
 )
+from app.services.storage_service import get_display_url
 
 router = APIRouter(prefix="/site", tags=["Site"])
 
@@ -175,7 +176,7 @@ def site_home(request: Request, response: Response, db: Session = Depends(get_db
                 p,
                 base_url=base_url,
                 fallback_image=(
-                    f"{base_url}/uploads/{p.category.image_path}"
+                    get_display_url(p.category.image_path, base_url)
                     if p.category and p.category.image_path
                     else None
                 ),

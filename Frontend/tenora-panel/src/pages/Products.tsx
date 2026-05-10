@@ -15,7 +15,7 @@ import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { getProducts, createProduct, updateProduct, deleteProduct, uploadProductImage } from "@/lib/api/products";
+import { getProducts, createProduct, updateProduct, deleteProduct, uploadProductImage, deleteProductImage } from "@/lib/api/products";
 import { getCategories } from "@/lib/api/categories";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
@@ -120,7 +120,8 @@ export default function Products() {
       stock: p.stock != null ? String(p.stock) : "",
       is_active: p.is_active ?? true,
       whatsapp_redirect: p.whatsapp_redirect ?? false,
-      discount_percent: p.discount_percent != null ? String(p.discount_percent) : "",
+      // Réduction : 0 ou null/undefined → champ vide (et non "0")
+      discount_percent: p.discount_percent ? String(p.discount_percent) : "",
       required_fields: Array.isArray(p.required_fields) ? p.required_fields : [],
     });
     setPendingImage(null);
@@ -361,10 +362,35 @@ export default function Products() {
             <div>
               <Label className="eyebrow mb-1.5 block" style={{ color: "hsl(var(--muted-foreground))" }}>Image</Label>
               {imagePreview ? (
-                <div className="flex items-center gap-3">
+                <div className="flex items-center gap-3 flex-wrap">
                   <img src={imagePreview} alt="" className="h-16 w-16 object-cover border-2 border-border" />
                   <Button type="button" variant="outline" size="sm" className="rounded-none border-2" onClick={() => { setPendingImage(null); setImagePreview(null); }}>
                     Changer
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    className="rounded-none border-2 border-destructive/60 text-destructive hover:bg-destructive hover:text-destructive-foreground"
+                    onClick={async () => {
+                      // Si on édite un produit qui a une image stockée côté backend → suppression réelle
+                      if (editing && editing.image_path && !pendingImage) {
+                        try {
+                          await deleteProductImage(editing.id);
+                          toast.success("Image supprimée");
+                          // Refléter la suppression dans l'objet courant pour éviter une re-suppression
+                          setEditing({ ...editing, image_path: undefined });
+                          load();
+                        } catch {
+                          toast.error("Erreur lors de la suppression de l'image");
+                          return;
+                        }
+                      }
+                      setPendingImage(null);
+                      setImagePreview(null);
+                    }}
+                  >
+                    Supprimer
                   </Button>
                 </div>
               ) : (
