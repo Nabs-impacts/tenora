@@ -11,7 +11,11 @@ import api from "./client";
  * via `meta` pour les futurs usages.
  */
 export const getProducts = async (params?: Record<string, unknown>) => {
-  const res = await api.get("/panel/products", { params });
+  // Par défaut on récupère TOUS les produits (la pagination backend par défaut
+  // est de 50 et tronquait silencieusement la liste — certains produits étaient
+  // alors invisibles dans le panel alors qu'ils existaient bien en base).
+  const finalParams = { per_page: 1000, ...(params || {}) };
+  const res = await api.get("/panel/products", { params: finalParams });
   const raw = res.data;
 
   if (Array.isArray(raw)) {
