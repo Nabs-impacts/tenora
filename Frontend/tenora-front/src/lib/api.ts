@@ -18,6 +18,21 @@ export function setApiErrorHandler(onUnauthorized: () => void) {
   _onUnauthorized = onUnauthorized;
 }
 
+// ── Déduplication des toasts d'erreur ────────────────────────────────────────
+// Quand la connexion tombe, toutes les requêtes en vol échouent simultanément
+// (+ 1 retry chacune). Sans garde, chaque échec affiche son propre toast → spam.
+// On n'affiche qu'une seule notif par type d'erreur par fenêtre de 8 secondes.
+const TOAST_DEBOUNCE_MS = 8_000;
+const _lastToastAt: Record<string, number> = {};
+
+function showOnce(key: string, fn: () => void): void {
+  const now = Date.now();
+  if (now - (_lastToastAt[key] ?? 0) > TOAST_DEBOUNCE_MS) {
+    _lastToastAt[key] = now;
+    fn();
+  }
+}
+
 function parseApiError(error: any): string | null {
   const detail = error?.response?.data?.detail;
   if (!detail) return null;
@@ -37,9 +52,13 @@ api.interceptors.response.use(
     if (!error.response) {
       window.dispatchEvent(new CustomEvent("tenora:api-error", { detail: { type: "network" } }));
       if (error.code === "ECONNABORTED") {
-        toast.error("La requete a pris trop de temps. Verifiez votre connexion.");
+        showOnce("timeout", () =>
+          toast.error("La requete a pris trop de temps. Verifiez votre connexion.")
+        );
       } else if (error.code !== "ERR_NETWORK" && error.message !== "Network Error") {
-        toast.error("Impossible de contacter le serveur. Reessayez.");
+        showOnce("unreachable", () =>
+          toast.error("Impossible de contacter le serveur. Reessayez.")
+        );
       }
       return Promise.reject(error);
     }
@@ -64,11 +83,15 @@ api.interceptors.response.use(
       return Promise.reject(error);
     }
     if (status === 429) {
-      toast.warning("Trop de requetes. Patientez quelques instants avant de reessayer.");
+      showOnce("rate-limit", () =>
+        toast.warning("Trop de requetes. Patientez quelques instants avant de reessayer.")
+      );
       return Promise.reject(error);
     }
     if (status >= 500) {
-      toast.error("Une erreur serveur est survenue. Notre equipe a ete alertee.");
+      showOnce("server-error", () =>
+        toast.error("Une erreur serveur est survenue. Notre equipe a ete alertee.")
+      );
       return Promise.reject(error);
     }
     return Promise.reject(error);
@@ -169,17 +192,12 @@ export interface SiteInit {
   featured_product_ids: number[];
 }
 
-// ─── Coupons ───────────────────────────────────────────────
-// NOTE: Le backend renvoie `final_price` (et `reason` en cas d'erreur).
-// On garde `final_total` / `message` en alias optionnels pour compat retro.
 export interface CouponValidation {
   valid: boolean;
   code: string;
   discount_type: "percent" | "amount";
   discount_value: number;
-  /** Montant de la reduction appliquee sur la commande courante. */
   discount_amount: number;
-  /** Total apres reduction (alias backend = final_price). */
   final_total?: number;
   final_price?: number;
   reason?: string | null;

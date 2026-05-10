@@ -8,9 +8,7 @@ from app.database import get_db
 from app.models.session import Session as SessionModel
 from app.models.user import User
 
-# ── Durées de session ────────────────────────────────────────────────────────
-# Les durées sont appliquées à la création (cf. routes/auth.py::login).
-# Ici on se contente de vérifier expires_at — pas de sliding window.
+
 USER_SESSION_TTL_DAYS = 7
 ADMIN_SESSION_TTL_HOURS = 12
 
