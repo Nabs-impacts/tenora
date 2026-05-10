@@ -65,6 +65,7 @@ def _build_site_data(db: Session) -> dict:
     announcement    = get_setting(db, "announcement", DEFAULT_ANNOUNCEMENT)
     payment_methods = get_setting(db, "payment_methods", DEFAULT_PAYMENT_METHODS)
     featured_ids    = get_setting(db, "featured_product_ids", [])
+    whatsapp_number = get_setting(db, "whatsapp_number", "") or ""
 
     active_methods = [m for m in payment_methods if m.get("enabled", True)]
 
@@ -81,6 +82,7 @@ def _build_site_data(db: Session) -> dict:
         "announcement":         announcement if isinstance(announcement, dict) else DEFAULT_ANNOUNCEMENT,
         "payment_methods":      active_methods,
         "featured_product_ids": featured_ids,
+        "whatsapp_number":      str(whatsapp_number).strip(),
     }
 
 
