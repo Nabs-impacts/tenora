@@ -5,10 +5,10 @@ from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 
 # ── Génération de code côté backend ───────────────────────────────────────────
-# Format obligatoire : TENORA-XXXXXXXX..XXXXXXXXXXXX (8 à 12 chars [A-Z0-9])
+# Format obligatoire : TENORA-XXXXXXXX..XXXXXXXXXXXXX (8 à 13 chars [A-Z0-9])
 COUPON_PREFIX = "TENORA-"
 COUPON_MIN_LEN = 8
-COUPON_MAX_LEN = 12
+COUPON_MAX_LEN = 13
 
 
 class CouponBase(BaseModel):
@@ -31,7 +31,6 @@ class CouponBase(BaseModel):
 class CouponCreate(CouponBase):
     # code optionnel : si absent, le service en génère un au format TENORA-XXXX
     code: Optional[str] = None
-    code_length: int = Field(10, ge=COUPON_MIN_LEN, le=COUPON_MAX_LEN)
 
 
 class CouponUpdate(BaseModel):

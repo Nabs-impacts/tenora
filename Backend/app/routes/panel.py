@@ -1001,11 +1001,11 @@ def create_coupon(
         code = normalize_code(data.code)
         if not is_valid_format(code):
             raise HTTPException(status_code=400,
-                detail="Le code doit être au format TENORA-XXXXXXXX (8 à 12 caractères A-Z/0-9).")
+                detail="Le code doit être au format TENORA-XXXXXXXXX (8 à 13 caractères A-Z/0-9 après le préfixe).")
         if db.query(Coupon.id).filter(Coupon.code == code).first():
             raise HTTPException(status_code=409, detail="Ce code existe déjà.")
     else:
-        code = generate_code(db, length=data.code_length)
+        code = generate_code(db)
 
     coupon = Coupon(
         code             = code,

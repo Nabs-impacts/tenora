@@ -52,7 +52,9 @@ export default function ProductPage() {
   const [orderError, setOrderError] = useState("");
 
   // ─── Coupon state ──────────────────────────────────────
-  const [couponInput, setCouponInput] = useState("");
+  const COUPON_PREFIX = "TENORA-";
+  const COUPON_MAX_INPUT = 20; // "TENORA-" + 13 chars max
+  const [couponInput, setCouponInput] = useState(COUPON_PREFIX);
   const [couponLoading, setCouponLoading] = useState(false);
   const [coupon, setCoupon] = useState<CouponValidation | null>(null);
   const [couponError, setCouponError] = useState("");
@@ -111,8 +113,8 @@ export default function ProductPage() {
 
   const applyCoupon = async () => {
     const code = couponInput.trim().toUpperCase();
-    if (!code) {
-      setCouponError("Entrez un code promo.");
+    if (!code || code === COUPON_PREFIX) {
+      setCouponError("Complétez votre code après « TENORA- ».");
       return;
     }
     setCouponError("");
@@ -141,7 +143,7 @@ export default function ProductPage() {
 
   const removeCoupon = () => {
     setCoupon(null);
-    setCouponInput("");
+    setCouponInput(COUPON_PREFIX);
     setCouponError("");
   };
 
@@ -334,24 +336,43 @@ export default function ProductPage() {
                           <input
                             value={couponInput}
                             onChange={(e) => {
-                              setCouponInput(e.target.value.toUpperCase());
+                              let v = e.target.value.toUpperCase();
+                              if (!v.startsWith(COUPON_PREFIX)) v = COUPON_PREFIX;
+                              if (v.length > COUPON_MAX_INPUT) v = v.slice(0, COUPON_MAX_INPUT);
+                              setCouponInput(v);
                               if (couponError) setCouponError("");
                             }}
                             onKeyDown={(e) => {
+                              const t = e.currentTarget;
+                              if ((e.key === "Backspace" || e.key === "Delete") &&
+                                  (t.selectionStart ?? 0) <= COUPON_PREFIX.length &&
+                                  (t.selectionEnd ?? 0) <= COUPON_PREFIX.length) {
+                                e.preventDefault();
+                                return;
+                              }
                               if (e.key === "Enter") {
                                 e.preventDefault();
                                 applyCoupon();
                               }
                             }}
-                            placeholder="TENORA-XXXXXXXX"
+                            onFocus={(e) => {
+                              const len = e.currentTarget.value.length;
+                              requestAnimationFrame(() =>
+                                e.currentTarget.setSelectionRange(
+                                  Math.max(len, COUPON_PREFIX.length),
+                                  Math.max(len, COUPON_PREFIX.length),
+                                )
+                              );
+                            }}
+                            placeholder={`${COUPON_PREFIX}XXXXXXXX`}
                             className="flex-1 h-11 px-3 bg-input border border-border text-sm font-mono uppercase tracking-wider focus:outline-none focus:ring-2 focus:ring-primary/40 focus:border-primary"
-                            maxLength={32}
+                            maxLength={COUPON_MAX_INPUT}
                           />
                           <Button
                             type="button"
                             variant="outline"
                             onClick={applyCoupon}
-                            disabled={couponLoading || !couponInput.trim()}
+                            disabled={couponLoading || !couponInput.trim() || couponInput.trim() === COUPON_PREFIX}
                             className="h-11 px-4 shrink-0"
                           >
                             {couponLoading ? <Loader2 className="size-4 animate-spin" /> : "Appliquer"}

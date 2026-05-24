@@ -17,7 +17,6 @@ export interface Coupon {
 
 export interface CouponPayload {
   code?: string;
-  code_length?: number;
   discount_percent?: number | null;
   discount_amount?:  number | null;
   user_id?: number | null;

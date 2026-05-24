@@ -17,6 +17,9 @@ import {
   SheetTitle,
 } from "@/components/ui/sheet";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+
+const COUPON_PREFIX = "TENORA-";
+const COUPON_MAX_INPUT = 20; // "TENORA-" (7) + 13 chars max
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
@@ -28,8 +31,7 @@ import { getProducts } from "@/lib/api/products";
 type DiscountType = "percent" | "amount";
 
 const empty = {
-  code: "",
-  code_length: 10,
+  code: COUPON_PREFIX,
   discount_type: "percent" as DiscountType,
   discount_value: "",
   user_id: "",
@@ -165,7 +167,6 @@ export default function CouponsPage() {
     setEditing(c);
     setForm({
       code: c.code,
-      code_length: 10,
       discount_type: c.discount_percent != null ? "percent" : "amount",
       discount_value: String(c.discount_percent ?? c.discount_amount ?? ""),
       user_id: c.user_id ? String(c.user_id) : "",
@@ -194,8 +195,9 @@ export default function CouponsPage() {
     if (editing) {
       updateM.mutate({ id: editing.id, data: payload });
     } else {
-      payload.code = form.code.trim() || undefined;
-      payload.code_length = form.code_length;
+      const trimmed = form.code.trim();
+      // si l'utilisateur n'a tapé que le préfixe → on laisse le backend générer
+      payload.code = trimmed && trimmed !== COUPON_PREFIX ? trimmed : undefined;
       createM.mutate(payload);
     }
   };
@@ -349,25 +351,42 @@ export default function CouponsPage() {
             {!editing ? (
               <div className="space-y-3">
                 <div>
-                  <Label className="eyebrow mb-1.5 block text-[10px] text-muted-foreground">CODE (LAISSE VIDE POUR GÉNÉRER)</Label>
+                  <Label className="eyebrow mb-1.5 block text-[10px] text-muted-foreground">
+                    CODE (LAISSE « {COUPON_PREFIX} » SEUL POUR GÉNÉRER AUTO)
+                  </Label>
                   <Input
                     value={form.code}
-                    onChange={(e) => setForm({ ...form, code: e.target.value.toUpperCase() })}
-                    placeholder="TENORA-XXXXXXXX"
+                    onChange={(e) => {
+                      let v = e.target.value.toUpperCase();
+                      // toujours conserver le préfixe TENORA-
+                      if (!v.startsWith(COUPON_PREFIX)) v = COUPON_PREFIX;
+                      if (v.length > COUPON_MAX_INPUT) v = v.slice(0, COUPON_MAX_INPUT);
+                      setForm({ ...form, code: v });
+                    }}
+                    onKeyDown={(e) => {
+                      // empêche la suppression du préfixe
+                      const t = e.currentTarget;
+                      if ((e.key === "Backspace" || e.key === "Delete") &&
+                          (t.selectionStart ?? 0) <= COUPON_PREFIX.length &&
+                          (t.selectionEnd ?? 0) <= COUPON_PREFIX.length) {
+                        e.preventDefault();
+                      }
+                    }}
+                    onFocus={(e) => {
+                      // place le curseur après le préfixe
+                      const len = e.currentTarget.value.length;
+                      requestAnimationFrame(() =>
+                        e.currentTarget.setSelectionRange(Math.max(len, COUPON_PREFIX.length), Math.max(len, COUPON_PREFIX.length))
+                      );
+                    }}
+                    placeholder={`${COUPON_PREFIX}XXXXXXXX`}
                     className="rounded-none border-2 mono uppercase h-12 text-base"
                     autoCapitalize="characters"
+                    maxLength={COUPON_MAX_INPUT}
                   />
-                </div>
-                <div>
-                  <Label className="eyebrow mb-1.5 block text-[10px] text-muted-foreground">LONGUEUR</Label>
-                  <Select value={String(form.code_length)} onValueChange={(v) => setForm({ ...form, code_length: Number(v) })}>
-                    <SelectTrigger className="rounded-none border-2 mono h-11"><SelectValue /></SelectTrigger>
-                    <SelectContent className="rounded-none border-2">
-                      {[8, 9, 10, 11, 12].map((n) => (
-                        <SelectItem key={n} value={String(n)}>{n} caractères</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                  <p className="mono text-[10px] text-muted-foreground mt-1.5">
+                    8 à 13 caractères A-Z/0-9 après le préfixe.
+                  </p>
                 </div>
               </div>
             ) : (
