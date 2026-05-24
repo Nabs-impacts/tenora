@@ -8,11 +8,7 @@ export function ProductCard({ product }: { product: Product }) {
   const hasDiscount = !!product.discount_percent && product.discount_percent > 0;
 
   const warmCache = () => {
-    // 1) Seed : on a déjà l'objet produit complet dans la liste,
-    //    autant le placer dans le cache de la query produit.
     qc.setQueryData(["product", product.id], product);
-
-    // 2) Prefetch léger pour rafraîchir en arrière-plan si stale.
     qc.prefetchQuery({
       queryKey: ["product", product.id],
       queryFn: () => productsApi.getProduct(product.id).then((r) => r.data),
@@ -34,6 +30,7 @@ export function ProductCard({ product }: { product: Product }) {
             src={product.image_url}
             alt={product.name}
             loading="lazy"
+            decoding="async"
             className="size-full object-cover group-hover:scale-105 transition-transform duration-500"
           />
         ) : (
@@ -56,10 +53,24 @@ export function ProductCard({ product }: { product: Product }) {
             Plus que {product.stock}
           </span>
         )}
-        <ArrowUpRight aria-hidden="true" className="absolute bottom-2 right-2 size-5 text-foreground opacity-0 group-hover:opacity-100 transition-opacity" />
+        <ArrowUpRight
+          aria-hidden="true"
+          className="absolute bottom-2 right-2 size-5 text-foreground opacity-0 group-hover:opacity-100 transition-opacity"
+        />
       </div>
       <div className="p-3 sm:p-4">
-        <h3 className="font-semibold text-sm sm:text-base line-clamp-2 min-h-[2.5em] normal-case tracking-normal">
+        {/* Titre : 2 lignes max, mots cassés proprement (plus de "…" brutal). */}
+        <h3
+          className="font-semibold text-sm sm:text-base leading-snug normal-case tracking-normal break-words [hyphens:auto]"
+          style={{
+            display: "-webkit-box",
+            WebkitLineClamp: 2,
+            WebkitBoxOrient: "vertical",
+            overflow: "hidden",
+            minHeight: "2.6em",
+          }}
+          title={product.name}
+        >
           {product.name}
         </h3>
         <div className="mt-2 flex items-baseline justify-between gap-2">

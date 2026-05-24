@@ -14,9 +14,13 @@ export function MobileTabBar() {
   const all = [
     ...tabs,
     user
-      ? { to: "/mes-commandes", label: "Commandes", icon: Package }
-      : { to: "/connexion", label: "Connexion", icon: LogIn },
-    { to: user ? "/profil" : "/inscription", label: user ? "Profil" : "S'inscrire", icon: user ? User : UserPlus },
+      ? { to: "/mes-commandes", label: "Cmd", icon: Package }
+      : { to: "/connexion", label: "Login", icon: LogIn },
+    {
+      to: user ? "/profil" : "/inscription",
+      label: user ? "Compte" : "S'inscrire",
+      icon: user ? User : UserPlus,
+    },
   ];
 
   return (
@@ -33,7 +37,7 @@ export function MobileTabBar() {
             end={(t as { end?: boolean }).end}
             className={({ isActive }) =>
               cn(
-                "relative flex flex-col items-center justify-center gap-1 min-h-[56px] py-2 px-0.5 text-[9px] font-bold uppercase tracking-wider transition-colors",
+                "relative flex flex-col items-center justify-center gap-1 min-h-[60px] py-2 px-0.5 text-[10px] font-bold uppercase tracking-wider transition-colors",
                 "active:bg-muted/40",
                 isActive ? "text-primary" : "text-muted-foreground"
               )
@@ -45,10 +49,7 @@ export function MobileTabBar() {
                   <span className="absolute top-0 left-1/2 -translate-x-1/2 w-8 h-0.5 bg-primary" />
                 )}
                 <t.icon
-                  className={cn(
-                    "size-[20px] transition-transform",
-                    isActive && "scale-110"
-                  )}
+                  className={cn("size-[20px] transition-transform", isActive && "scale-110")}
                 />
                 <span className="truncate max-w-full leading-none">{t.label}</span>
               </>

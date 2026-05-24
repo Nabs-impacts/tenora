@@ -160,12 +160,17 @@ export default function Home() {
               <strong className="text-foreground"> Zéro délai. Zéro galère.</strong>
             </p>
 
-            <div className="flex flex-col sm:flex-row gap-5 sm:gap-6 sm:items-center">
-              {/* CTA principal — Boutique */}
-              <Link to="/boutique" className="group relative inline-flex items-center justify-center shrink-0 brut-btn-shadow w-full sm:w-auto max-w-full">
-                <div className="relative bg-background border-2 border-primary text-primary px-6 sm:px-8 py-4 flex items-center justify-center gap-3 transition-colors group-hover:bg-primary group-hover:text-primary-foreground w-full sm:w-auto">
-                  <span className="font-display text-2xl sm:text-3xl uppercase font-bold tracking-wider">Start [Boutique]</span>
-                  <span className="size-3 bg-primary group-hover:bg-background animate-blink" />
+            <div className="flex flex-col sm:flex-row gap-5 sm:gap-6 sm:items-center w-full sm:w-auto">
+              {/* CTA principal — Boutique : fond plein sur mobile pour un contraste fort */}
+              <Link
+                to="/boutique"
+                className="group relative inline-flex items-center justify-center shrink-0 brut-btn-shadow w-full sm:w-auto"
+              >
+                <div className="relative bg-primary text-primary-foreground sm:bg-background sm:text-primary border-2 border-primary px-6 sm:px-8 py-4 flex items-center justify-center gap-3 transition-colors sm:group-hover:bg-primary sm:group-hover:text-primary-foreground w-full sm:w-auto">
+                  <span className="font-display text-2xl sm:text-3xl uppercase font-bold tracking-wider">
+                    Start [Boutique]
+                  </span>
+                  <span className="size-3 bg-primary-foreground sm:bg-primary sm:group-hover:bg-background animate-blink" />
                 </div>
               </Link>
             </div>

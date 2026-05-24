@@ -2,13 +2,28 @@ import { useState } from "react";
 import { useNavigate, useParams, Link } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import {
-  ArrowLeft, Check, Loader2, Upload, ShieldCheck, Zap,
-  Image as ImageIcon, MessageCircle, Clock, BadgeCheck, Tag, X,
+  ArrowLeft,
+  Check,
+  Loader2,
+  Upload,
+  ShieldCheck,
+  Zap,
+  Image as ImageIcon,
+  MessageCircle,
+  Clock,
+  BadgeCheck,
+  Tag,
+  X,
+  ChevronRight,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
-  productsApi, ordersApi, couponsApi, formatXOF,
-  type Order, type CouponValidation,
+  productsApi,
+  ordersApi,
+  couponsApi,
+  formatXOF,
+  type Order,
+  type CouponValidation,
 } from "@/lib/api";
 import { useAuth } from "@/context/AuthContext";
 import { useSite } from "@/context/SiteContext";
@@ -24,7 +39,9 @@ function cleanDescription(text: string | null | undefined): string {
     .split(/\r?\n/)
     .map((l) => l.trim())
     .filter((l) => l && !/^[.\u2026\-—_*•·]+$/.test(l))
-    .map((l) => (/^[a-zàâäéèêëîïôöùûüç]/.test(l) ? l.charAt(0).toUpperCase() + l.slice(1) : l))
+    .map((l) =>
+      /^[a-zàâäéèêëîïôöùûüç]/.test(l) ? l.charAt(0).toUpperCase() + l.slice(1) : l
+    )
     .join("\n");
 }
 
@@ -81,15 +98,20 @@ export default function ProductPage() {
     return (
       <div className="container-app py-20 text-center">
         <p className="text-muted-foreground mb-4">Produit introuvable.</p>
-        <Button asChild variant="outline"><Link to="/boutique"><ArrowLeft className="size-4" /> Retour boutique</Link></Button>
+        <Button asChild variant="outline">
+          <Link to="/boutique">
+            <ArrowLeft className="size-4" /> Retour boutique
+          </Link>
+        </Button>
       </div>
     );
   }
 
   const basePrice = product.final_price ?? product.price;
-  // Le backend renvoie `final_price` ; on garde un fallback local pour eviter NaN.
   const finalTotal = coupon
-    ? (coupon.final_total ?? coupon.final_price ?? Math.max(0, basePrice - (coupon.discount_amount || 0)))
+    ? coupon.final_total ??
+      coupon.final_price ??
+      Math.max(0, basePrice - (coupon.discount_amount || 0))
     : basePrice;
 
   const validateFields = () => {
@@ -105,7 +127,9 @@ export default function ProductPage() {
             setOrderError(`Le champ « ${f.label} » est invalide.`);
             return false;
           }
-        } catch {/* */ }
+        } catch {
+          /* */
+        }
       }
     }
     return true;
@@ -130,7 +154,9 @@ export default function ProductPage() {
         setCoupon(null);
       } else {
         setCoupon(r.data);
-        toast.success(`Code « ${r.data.code} » appliqué — ${formatXOF(r.data.discount_amount)} de réduction.`);
+        toast.success(
+          `Code « ${r.data.code} » appliqué — ${formatXOF(r.data.discount_amount)} de réduction.`
+        );
       }
     } catch (e: any) {
       const msg = e?.response?.data?.detail || "Code promo invalide ou expiré.";
@@ -163,7 +189,14 @@ export default function ProductPage() {
       window.open(productsApi.getWhatsappLink(product.id, params), "_blank");
       return;
     }
-    if (!validateFields()) return;
+    if (!validateFields()) {
+      requestAnimationFrame(() => {
+        document
+          .getElementById("order-form-top")
+          ?.scrollIntoView({ behavior: "smooth", block: "start" });
+      });
+      return;
+    }
     if (!paymentMethod) {
       setOrderError("Choisissez un moyen de paiement.");
       return;
@@ -191,9 +224,16 @@ export default function ProductPage() {
     try {
       await ordersApi.uploadScreenshot(order.id, file);
       toast.success("Capture envoyée — votre commande est en cours de validation.");
-      const method = paymentMethods.find((m) => m.id === order.payment_method)?.name || order.payment_method || "";
+      const method =
+        paymentMethods.find((m) => m.id === order.payment_method)?.name ||
+        order.payment_method ||
+        "";
       navigate(
-        `/confirmation?orderId=${order.id}&product=${encodeURIComponent(product.name)}&amount=${encodeURIComponent(formatXOF(order.total_price))}&method=${encodeURIComponent(method)}`
+        `/confirmation?orderId=${order.id}&product=${encodeURIComponent(
+          product.name
+        )}&amount=${encodeURIComponent(formatXOF(order.total_price))}&method=${encodeURIComponent(
+          method
+        )}`
       );
     } catch (e: any) {
       toast.error(e?.response?.data?.detail || "Échec de l'envoi de la capture.");
@@ -205,17 +245,34 @@ export default function ProductPage() {
   const selectedMethod = paymentMethods.find((m) => m.id === paymentMethod);
 
   return (
-    <div className="container-app py-6 md:py-10">
-      <Link to="/boutique" className="text-sm text-muted-foreground hover:text-foreground inline-flex items-center gap-1 mb-4">
-        <ArrowLeft className="size-4" /> Retour boutique
-      </Link>
+    // pb-28 mobile = laisse de la place pour la sticky CTA (~88px) + safe area
+    <div className="container-app py-4 md:py-10 pb-28 md:pb-10">
+      {/* Breadcrumb */}
+      <nav
+        aria-label="Fil d'Ariane"
+        className="mb-4 text-xs font-mono uppercase tracking-widest flex items-center gap-1.5 text-muted-foreground overflow-x-auto whitespace-nowrap"
+      >
+        <Link to="/" className="hover:text-foreground transition-colors">
+          Accueil
+        </Link>
+        <ChevronRight className="size-3 shrink-0" />
+        <Link to="/boutique" className="hover:text-foreground transition-colors">
+          Boutique
+        </Link>
+        <ChevronRight className="size-3 shrink-0" />
+        <span className="text-foreground truncate max-w-[55vw] md:max-w-none">{product.name}</span>
+      </nav>
 
-      <div className="grid md:grid-cols-2 gap-6 md:gap-10">
+      <div id="order-form-top" className="grid md:grid-cols-2 gap-6 md:gap-10">
         {/* IMAGE */}
         <div>
           <div className="aspect-square overflow-hidden card-elev">
             {product.image_url ? (
-              <img src={product.image_url} alt={product.name} className="size-full object-cover" />
+              <img
+                src={product.image_url}
+                alt={product.name}
+                className="size-full object-cover"
+              />
             ) : (
               <div className="size-full flex items-center justify-center text-muted-foreground bg-muted">
                 <ImageIcon className="size-16 opacity-30" />
@@ -226,15 +283,21 @@ export default function ProductPage() {
           <div className="grid grid-cols-3 gap-2 mt-3">
             <div className="flex flex-col items-center gap-1.5 border-2 border-success/50 bg-success/10 px-2 py-2.5 text-center">
               <Check className="size-4 text-success" strokeWidth={2.5} />
-              <span className="text-[10px] font-bold uppercase tracking-wider text-success leading-tight">En stock</span>
+              <span className="text-[10px] font-bold uppercase tracking-wider text-success leading-tight">
+                En stock
+              </span>
             </div>
             <div className="flex flex-col items-center gap-1.5 border-2 border-primary/50 bg-primary/10 px-2 py-2.5 text-center">
               <Clock className="size-4 text-primary" strokeWidth={2.5} />
-              <span className="text-[10px] font-bold uppercase tracking-wider text-primary leading-tight">{"< 30 min"}</span>
+              <span className="text-[10px] font-bold uppercase tracking-wider text-primary leading-tight">
+                {"< 30 min"}
+              </span>
             </div>
             <div className="flex flex-col items-center gap-1.5 border-2 border-amber-500/50 bg-amber-500/10 px-2 py-2.5 text-center">
               <ShieldCheck className="size-4 text-amber-500" strokeWidth={2.5} />
-              <span className="text-[10px] font-bold uppercase tracking-wider text-amber-500 leading-tight">Sécurisé</span>
+              <span className="text-[10px] font-bold uppercase tracking-wider text-amber-500 leading-tight">
+                Sécurisé
+              </span>
             </div>
           </div>
         </div>
@@ -242,16 +305,19 @@ export default function ProductPage() {
         {/* INFO + ACTION */}
         <div className="space-y-5">
           <div>
-            <h1 className="font-display text-2xl md:text-3xl font-bold">{product.name}</h1>
-            {product.description && (() => {
-              const desc = cleanDescription(product.description);
-              return desc ? (
-                <HighlightedText
-                  text={desc}
-                  className="text-muted-foreground mt-2 leading-relaxed"
-                />
-              ) : null;
-            })()}
+            <h1 className="font-display text-2xl md:text-3xl font-bold break-words">
+              {product.name}
+            </h1>
+            {product.description &&
+              (() => {
+                const desc = cleanDescription(product.description);
+                return desc ? (
+                  <HighlightedText
+                    text={desc}
+                    className="text-muted-foreground mt-2 leading-relaxed"
+                  />
+                ) : null;
+              })()}
           </div>
 
           <div className="flex items-baseline gap-3 flex-wrap">
@@ -260,15 +326,21 @@ export default function ProductPage() {
             </span>
             {coupon ? (
               <>
-                <span className="text-muted-foreground line-through">{formatXOF(basePrice)}</span>
+                <span className="text-muted-foreground line-through">
+                  {formatXOF(basePrice)}
+                </span>
                 <span className="chip bg-success text-success-foreground font-bold">
                   -{formatXOF(coupon.discount_amount)}
                 </span>
               </>
             ) : product.discount_percent ? (
               <>
-                <span className="text-muted-foreground line-through">{formatXOF(product.price)}</span>
-                <span className="chip bg-destructive text-destructive-foreground font-bold">-{product.discount_percent}%</span>
+                <span className="text-muted-foreground line-through">
+                  {formatXOF(product.price)}
+                </span>
+                <span className="chip bg-destructive text-destructive-foreground font-bold">
+                  -{product.discount_percent}%
+                </span>
               </>
             ) : null}
           </div>
@@ -285,16 +357,21 @@ export default function ProductPage() {
                   <div className="space-y-3">
                     <div className="flex items-center gap-2 pb-2 border-b-2 border-border">
                       <BadgeCheck className="size-4 text-primary" />
-                      <p className="font-bold text-sm uppercase tracking-wider">Informations requises</p>
+                      <p className="font-bold text-sm uppercase tracking-wider">
+                        Informations requises
+                      </p>
                     </div>
                     {product.required_fields.map((f) => (
                       <div key={f.key}>
                         <label className="text-xs font-medium text-muted-foreground">
-                          {f.label}{f.required && <span className="text-destructive"> *</span>}
+                          {f.label}
+                          {f.required && <span className="text-destructive"> *</span>}
                         </label>
                         <input
                           value={fields[f.key] || ""}
-                          onChange={(e) => setFields((p) => ({ ...p, [f.key]: e.target.value }))}
+                          onChange={(e) =>
+                            setFields((p) => ({ ...p, [f.key]: e.target.value }))
+                          }
                           placeholder={f.placeholder || ""}
                           className="mt-1 w-full h-11 px-3 bg-input border border-border text-sm focus:outline-none focus:ring-2 focus:ring-primary/40 focus:border-primary"
                         />
@@ -315,7 +392,9 @@ export default function ProductPage() {
                         <div className="flex items-center gap-2 min-w-0">
                           <BadgeCheck className="size-4 text-success shrink-0" />
                           <div className="min-w-0">
-                            <p className="font-mono text-sm font-bold text-success truncate">{coupon.code}</p>
+                            <p className="font-mono text-sm font-bold text-success truncate">
+                              {coupon.code}
+                            </p>
                             <p className="text-[11px] text-success/80">
                               -{formatXOF(coupon.discount_amount)} appliqué
                             </p>
@@ -338,15 +417,18 @@ export default function ProductPage() {
                             onChange={(e) => {
                               let v = e.target.value.toUpperCase();
                               if (!v.startsWith(COUPON_PREFIX)) v = COUPON_PREFIX;
-                              if (v.length > COUPON_MAX_INPUT) v = v.slice(0, COUPON_MAX_INPUT);
+                              if (v.length > COUPON_MAX_INPUT)
+                                v = v.slice(0, COUPON_MAX_INPUT);
                               setCouponInput(v);
                               if (couponError) setCouponError("");
                             }}
                             onKeyDown={(e) => {
                               const t = e.currentTarget;
-                              if ((e.key === "Backspace" || e.key === "Delete") &&
-                                  (t.selectionStart ?? 0) <= COUPON_PREFIX.length &&
-                                  (t.selectionEnd ?? 0) <= COUPON_PREFIX.length) {
+                              if (
+                                (e.key === "Backspace" || e.key === "Delete") &&
+                                (t.selectionStart ?? 0) <= COUPON_PREFIX.length &&
+                                (t.selectionEnd ?? 0) <= COUPON_PREFIX.length
+                              ) {
                                 e.preventDefault();
                                 return;
                               }
@@ -360,11 +442,15 @@ export default function ProductPage() {
                               requestAnimationFrame(() =>
                                 e.currentTarget.setSelectionRange(
                                   Math.max(len, COUPON_PREFIX.length),
-                                  Math.max(len, COUPON_PREFIX.length),
+                                  Math.max(len, COUPON_PREFIX.length)
                                 )
                               );
                             }}
                             placeholder={`${COUPON_PREFIX}XXXXXXXX`}
+                            inputMode="text"
+                            autoCapitalize="characters"
+                            autoCorrect="off"
+                            spellCheck={false}
                             className="flex-1 h-11 px-3 bg-input border border-border text-sm font-mono uppercase tracking-wider focus:outline-none focus:ring-2 focus:ring-primary/40 focus:border-primary"
                             maxLength={COUPON_MAX_INPUT}
                           />
@@ -372,14 +458,45 @@ export default function ProductPage() {
                             type="button"
                             variant="outline"
                             onClick={applyCoupon}
-                            disabled={couponLoading || !couponInput.trim() || couponInput.trim() === COUPON_PREFIX}
+                            disabled={
+                              couponLoading ||
+                              !couponInput.trim() ||
+                              couponInput.trim() === COUPON_PREFIX
+                            }
                             className="h-11 px-4 shrink-0"
                           >
-                            {couponLoading ? <Loader2 className="size-4 animate-spin" /> : "Appliquer"}
+                            {couponLoading ? (
+                              <Loader2 className="size-4 animate-spin" />
+                            ) : (
+                              "Appliquer"
+                            )}
                           </Button>
                         </div>
+                        <p className="text-[11px] text-muted-foreground font-mono">
+                          Format : TENORA- suivi de votre code (13 caractères max).
+                        </p>
                         {couponError && (
-                          <p className="text-xs text-destructive">{couponError}</p>
+                          <div className="text-xs text-destructive flex items-start gap-1.5">
+                            <X className="size-3.5 mt-0.5 shrink-0" />
+                            <span>
+                              {couponError}
+                              {wa && (
+                                <>
+                                  {" — "}
+                                  <a
+                                    href={`https://wa.me/${wa}?text=${encodeURIComponent(
+                                      "Bonjour, mon code promo ne marche pas"
+                                    )}`}
+                                    target="_blank"
+                                    rel="noopener"
+                                    className="underline font-semibold hover:text-foreground"
+                                  >
+                                    aide WhatsApp
+                                  </a>
+                                </>
+                              )}
+                            </span>
+                          </div>
                         )}
                       </>
                     )}
@@ -407,7 +524,14 @@ export default function ProductPage() {
                             onClick={() => setPaymentMethod(m.id)}
                             aria-pressed={active}
                             title={m.name}
-                            style={active && accent ? { borderColor: accent, boxShadow: `0 0 0 1px ${accent} inset` } : undefined}
+                            style={
+                              active && accent
+                                ? {
+                                    borderColor: accent,
+                                    boxShadow: `0 0 0 1px ${accent} inset`,
+                                  }
+                                : undefined
+                            }
                             className={cn(
                               "group relative flex flex-col items-center gap-1.5 p-2 border-2 transition-all bg-background",
                               active
@@ -452,20 +576,30 @@ export default function ProductPage() {
                   </div>
                 )}
 
+                {/* CTA inline desktop uniquement — mobile a la sticky CTA */}
                 <Button
                   onClick={handleCreate}
                   disabled={creating}
                   size="lg"
-                  className="w-full h-12 bg-gradient-primary text-primary-foreground hover:opacity-90 shadow-glow"
+                  className="hidden md:flex w-full h-12 bg-gradient-primary text-primary-foreground hover:opacity-90 shadow-glow"
                 >
-                  {creating ? <Loader2 className="size-4 animate-spin" /> : product.whatsapp_redirect ? <MessageCircle className="size-4" /> : <Zap className="size-4" />}
-                  {product.whatsapp_redirect ? "Continuer sur WhatsApp" : "Commander maintenant"}
+                  {creating ? (
+                    <Loader2 className="size-4 animate-spin" />
+                  ) : product.whatsapp_redirect ? (
+                    <MessageCircle className="size-4" />
+                  ) : (
+                    <Zap className="size-4" />
+                  )}
+                  {product.whatsapp_redirect
+                    ? "Continuer sur WhatsApp"
+                    : "Commander maintenant"}
                 </Button>
               </>
             ) : (
               <>
                 <div className="bg-success/10 border border-success/30 text-success text-sm px-3 py-2 flex items-center gap-2">
-                  <Check className="size-4" /> Commande #{order.id} créée. Réglez puis envoyez la capture.
+                  <Check className="size-4" /> Commande #{order.id} créée. Réglez puis envoyez la
+                  capture.
                 </div>
 
                 {selectedMethod && (
@@ -487,9 +621,16 @@ export default function ProductPage() {
                       onChange={(e) => setFile(e.target.files?.[0] || null)}
                       className="absolute inset-0 opacity-0 cursor-pointer"
                     />
-                    <div className={cn("border-2 border-dashed p-6 text-center", file ? "border-primary bg-primary/5" : "border-border")}>
+                    <div
+                      className={cn(
+                        "border-2 border-dashed p-6 text-center",
+                        file ? "border-primary bg-primary/5" : "border-border"
+                      )}
+                    >
                       <Upload className="size-6 mx-auto text-muted-foreground mb-2" />
-                      <p className="text-sm font-medium">{file ? file.name : "Cliquez pour choisir une capture"}</p>
+                      <p className="text-sm font-medium">
+                        {file ? file.name : "Cliquez pour choisir une capture"}
+                      </p>
                       <p className="text-xs text-muted-foreground mt-1">PNG ou JPG, max ~5MB</p>
                     </div>
                   </div>
@@ -501,7 +642,11 @@ export default function ProductPage() {
                   size="lg"
                   className="w-full h-12 bg-gradient-primary text-primary-foreground hover:opacity-90 shadow-glow"
                 >
-                  {uploading ? <Loader2 className="size-4 animate-spin" /> : <Upload className="size-4" />}
+                  {uploading ? (
+                    <Loader2 className="size-4 animate-spin" />
+                  ) : (
+                    <Upload className="size-4" />
+                  )}
                   Envoyer la capture
                 </Button>
 
@@ -509,7 +654,9 @@ export default function ProductPage() {
                   <p className="text-xs text-muted-foreground text-center">
                     Un problème ?{" "}
                     <a
-                      href={`https://wa.me/${wa}?text=${encodeURIComponent(`Commande #${order.id} — besoin d'aide`)}`}
+                      href={`https://wa.me/${wa}?text=${encodeURIComponent(
+                        `Commande #${order.id} — besoin d'aide`
+                      )}`}
                       target="_blank"
                       rel="noopener"
                       className="text-primary font-medium hover:underline"
@@ -523,6 +670,45 @@ export default function ProductPage() {
           </div>
         </div>
       </div>
+
+      {/* ─── STICKY CTA MOBILE (avant création commande) ─── */}
+      {!order && (
+        <div
+          className="md:hidden fixed inset-x-0 z-40 bg-background/95 backdrop-blur-xl border-t-2 border-border p-3"
+          style={{
+            bottom: "calc(76px + env(safe-area-inset-bottom, 0px))",
+            boxShadow: "0 -4px 12px -4px rgba(0,0,0,0.15)",
+          }}
+        >
+          <div className="flex items-center gap-3">
+            <div className="min-w-0 flex-1">
+              <p className="text-[10px] font-mono uppercase tracking-widest text-muted-foreground leading-none">
+                Total
+              </p>
+              <p className="font-display text-xl font-bold gradient-text leading-tight truncate">
+                {formatXOF(finalTotal)}
+              </p>
+            </div>
+            <Button
+              onClick={handleCreate}
+              disabled={creating}
+              className="h-12 px-5 bg-gradient-primary text-primary-foreground shadow-glow font-bold uppercase tracking-wider text-xs shrink-0"
+            >
+              {creating ? (
+                <Loader2 className="size-4 animate-spin" />
+              ) : product.whatsapp_redirect ? (
+                <>
+                  <MessageCircle className="size-4" /> WhatsApp
+                </>
+              ) : (
+                <>
+                  <Zap className="size-4" /> Commander
+                </>
+              )}
+            </Button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

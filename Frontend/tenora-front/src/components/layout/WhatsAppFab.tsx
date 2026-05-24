@@ -1,21 +1,22 @@
+import { useLocation } from "react-router-dom";
 import { useSite } from "@/context/SiteContext";
 
 /**
- * Bouton flottant WhatsApp — version compacte & intuitive.
- *
- * - Icône WhatsApp officielle (immédiatement reconnaissable).
- * - Carré compact 44px (mobile) / 48px (desktop), pas de label permanent.
- * - Tooltip "Service client" qui apparaît au hover (desktop).
- * - Style Tenora cubique conservé : bordure 2px, ombre brutaliste, fond primary.
- * - Mobile : positionné au-dessus de la MobileTabBar (~76px + safe-area).
+ * Bouton flottant WhatsApp.
+ * - Masqué sur les pages produit en mobile (la sticky CTA prend le relais).
+ * - Tooltip "Service client" au hover (desktop).
+ * - Position au-dessus de la MobileTabBar avec marge sécurité iOS.
  */
 export function WhatsAppFab() {
   const { data } = useSite();
+  const { pathname } = useLocation();
   const raw = data?.whatsapp_number?.trim();
   if (!raw) return null;
 
   const number = raw.replace(/[^\d]/g, "");
   if (!number) return null;
+
+  const isProductPage = pathname.startsWith("/produit/");
 
   const href = `https://wa.me/${number}?text=${encodeURIComponent(
     "Bonjour Tenora 👋 j'ai une question"
@@ -28,21 +29,24 @@ export function WhatsAppFab() {
       rel="noopener noreferrer"
       aria-label="Service client Tenora sur WhatsApp"
       title="Service client"
-      className="
-        group fixed right-4 z-40 inline-flex items-center justify-center
-        h-11 w-11 md:h-12 md:w-12
-        border-2 border-foreground bg-primary text-primary-foreground
-        shadow-[4px_4px_0_0_hsl(var(--foreground))]
-        transition-transform duration-100
-        hover:-translate-x-[2px] hover:-translate-y-[2px]
-        hover:shadow-[6px_6px_0_0_hsl(var(--foreground))]
-        active:translate-x-[1px] active:translate-y-[1px]
-        active:shadow-[2px_2px_0_0_hsl(var(--foreground))]
-        md:right-6
-        bottom-[calc(84px+env(safe-area-inset-bottom,0px))] md:bottom-6
-      "
+      className={[
+        "group fixed right-4 z-40 inline-flex items-center justify-center",
+        "h-11 w-11 md:h-12 md:w-12",
+        "border-2 border-foreground bg-primary text-primary-foreground",
+        "shadow-[4px_4px_0_0_hsl(var(--foreground))]",
+        "transition-transform duration-100",
+        "hover:-translate-x-[2px] hover:-translate-y-[2px]",
+        "hover:shadow-[6px_6px_0_0_hsl(var(--foreground))]",
+        "active:translate-x-[1px] active:translate-y-[1px]",
+        "active:shadow-[2px_2px_0_0_hsl(var(--foreground))]",
+        "md:right-6 md:bottom-6",
+        // Mobile : caché sur page produit (sticky CTA), sinon lifted au-dessus de la tab bar
+        isProductPage
+          ? "hidden md:inline-flex"
+          : "bottom-[calc(88px+env(safe-area-inset-bottom,0px))]",
+      ].join(" ")}
     >
-      {/* Logo WhatsApp officiel — instantanément reconnaissable */}
+      {/* Logo WhatsApp officiel */}
       <svg
         width="22"
         height="22"
