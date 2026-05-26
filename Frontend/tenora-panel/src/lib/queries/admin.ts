@@ -1,23 +1,6 @@
 /**
  * Hooks React Query centralisés pour le panel admin.
- *
- * BÉNÉFICES vs l'ancien pattern useState+useEffect :
- *  - cache partagé : ouvrir Produits puis Catégories réutilise le résultat de
- *    /panel/categories au lieu de refaire l'appel.
- *  - dédup automatique : si deux composants demandent la même donnée en
- *    parallèle, une seule requête réseau est émise.
- *  - invalidation déclarative après mutation : `invalidateQueries(qk.products)`
- *    après un createProduct, plutôt qu'un `load()` manuel.
- *  - background refetch transparent : la liste s'auto-rafraîchit quand
- *    l'utilisateur revient sur l'onglet (déjà configuré dans App.tsx).
- *
- * Convention `qk` : tous les keys passent par cette factory typée pour éviter
- * les fautes de frappe et faciliter l'invalidation ciblée.
- *
- * OPTIMISATIONS (audit requêtes) :
- *  - staleTime augmenté sur les données quasi-statiques (Users 5min, Imports 60s)
- *  - refetchOnWindowFocus désactivé pour Settings, Users, Categories (données stables)
- *  - refetchOnWindowFocus maintenu pour Orders, Dashboard, Imports (fraîcheur critique)
+ * (Ajout des hooks Statistiques en bas — le reste est inchangé.)
  */
 import {
   useQuery,
@@ -38,6 +21,11 @@ import { getImports, updateImportStatus } from "@/lib/api/imports";
 import { getUsers } from "@/lib/api/users";
 import { getDashboard } from "@/lib/api/dashboard";
 import { getSettings } from "@/lib/api/settings";
+import {
+  getStatisticsOverview, getStatisticsOrders, getStatisticsRevenue,
+  getStatisticsProducts, getStatisticsCustomers, getStatisticsCoupons,
+  type StatsParams,
+} from "@/lib/api/statistics";
 
 export const qk = {
   dashboard:      ["dashboard"] as const,
@@ -50,6 +38,14 @@ export const qk = {
   users:    (params?: Record<string, unknown>) =>
     ["users", params ?? {}] as const,
   settings:       ["settings"] as const,
+  stats: {
+    overview:  (p: StatsParams) => ["stats-overview",  p] as const,
+    orders:    (p: StatsParams) => ["stats-orders",    p] as const,
+    revenue:   (p: StatsParams) => ["stats-revenue",   p] as const,
+    products:  (p: StatsParams) => ["stats-products",  p] as const,
+    customers: (p: StatsParams) => ["stats-customers", p] as const,
+    coupons:   (p: StatsParams) => ["stats-coupons",   p] as const,
+  },
 };
 
 // ─── DASHBOARD ───────────────────────────────────────────────────────────────
@@ -67,7 +63,7 @@ export function useCategories() {
     queryKey: qk.categories,
     queryFn: async () => (await getCategories()).data ?? [],
     staleTime: 5 * 60_000,
-    refetchOnWindowFocus: false,       // données stables, l'admin sait quand rafraîchir
+    refetchOnWindowFocus: false,
   });
 }
 
@@ -189,7 +185,7 @@ export function useImports(status?: string) {
       if (Array.isArray(data)) return { items: data, total: data.length };
       return data as { items: unknown[]; total: number };
     },
-    staleTime: 60_000,                 // 30s → 60s : imports changent moins souvent
+    staleTime: 60_000,
   });
 }
 
@@ -212,8 +208,8 @@ export function useUsers(params: { page: number; per_page: number; q?: string })
       users: unknown[]; total: number; page: number; per_page: number;
     },
     placeholderData: keepPreviousData,
-    staleTime: 5 * 60_000,            // 60s → 5min : les users ne s'ajoutent pas en boucle
-    refetchOnWindowFocus: false,       // données stables
+    staleTime: 5 * 60_000,
+    refetchOnWindowFocus: false,
   });
 }
 
@@ -223,6 +219,50 @@ export function useSettings() {
     queryKey: qk.settings,
     queryFn: async () => (await getSettings()).data,
     staleTime: 5 * 60_000,
-    refetchOnWindowFocus: false,       // settings : l'admin sait quand il modifie
+    refetchOnWindowFocus: false,
+  });
+}
+
+// ─── STATISTIQUES ────────────────────────────────────────────────────────────
+export function useStatisticsOverview(params: StatsParams) {
+  return useQuery({
+    queryKey: qk.stats.overview(params),
+    queryFn: async () => (await getStatisticsOverview(params)).data,
+    staleTime: 60_000,
+  });
+}
+export function useStatisticsOrders(params: StatsParams) {
+  return useQuery({
+    queryKey: qk.stats.orders(params),
+    queryFn: async () => (await getStatisticsOrders(params)).data,
+    staleTime: 60_000,
+  });
+}
+export function useStatisticsRevenue(params: StatsParams) {
+  return useQuery({
+    queryKey: qk.stats.revenue(params),
+    queryFn: async () => (await getStatisticsRevenue(params)).data,
+    staleTime: 60_000,
+  });
+}
+export function useStatisticsProducts(params: StatsParams) {
+  return useQuery({
+    queryKey: qk.stats.products(params),
+    queryFn: async () => (await getStatisticsProducts(params)).data,
+    staleTime: 60_000,
+  });
+}
+export function useStatisticsCustomers(params: StatsParams) {
+  return useQuery({
+    queryKey: qk.stats.customers(params),
+    queryFn: async () => (await getStatisticsCustomers(params)).data,
+    staleTime: 60_000,
+  });
+}
+export function useStatisticsCoupons(params: StatsParams) {
+  return useQuery({
+    queryKey: qk.stats.coupons(params),
+    queryFn: async () => (await getStatisticsCoupons(params)).data,
+    staleTime: 60_000,
   });
 }

@@ -1,4 +1,4 @@
-// === Remplace App.tsx en entier (ajout route /coupons) ===
+// === Remplace App.tsx en entier (ajout route /statistics) ===
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Route, Routes } from "react-router-dom";
 import { Toaster as Sonner } from "@/components/ui/sonner";
@@ -11,7 +11,8 @@ import Products from "@/pages/Products";
 import Orders from "@/pages/Orders";
 import Imports from "@/pages/Imports";
 import Users from "@/pages/Users";
-import Coupons from "@/pages/Coupons"; // NEW
+import Coupons from "@/pages/Coupons";
+import Statistics from "@/pages/Statistics"; // NEW
 import SettingsPage from "@/pages/Settings";
 import NotFound from "./pages/NotFound";
 
@@ -40,9 +41,10 @@ const App = () => (
             <Route path="categories" element={<Categories />} />
             <Route path="products" element={<Products />} />
             <Route path="orders" element={<Orders />} />
-            <Route path="coupons" element={<Coupons />} /> {/* NEW */}
+            <Route path="coupons" element={<Coupons />} />
             <Route path="imports" element={<Imports />} />
             <Route path="users" element={<Users />} />
+            <Route path="statistics" element={<Statistics />} /> {/* NEW */}
             <Route path="settings" element={<SettingsPage />} />
           </Route>
           <Route path="*" element={<NotFound />} />
