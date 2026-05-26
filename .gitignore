@@ -16,6 +16,7 @@ BravoApiKey.txt
 .venv/
 venv/
 env/
+plandeploiement.txt
 
 # --- Dépendances JS ---
 node_modules/
