@@ -592,29 +592,49 @@ def export_csv(
 def _make_pdf(section: str, start: datetime, end: datetime, data: dict) -> bytes:
     """Génère un PDF propre avec en-tête, KPIs et tableau de données."""
 
+    SECTION_LABELS = {
+        "overview": "Vue Globale", "orders": "Commandes", "revenue": "Revenus",
+        "products": "Produits", "customers": "Clients", "coupons": "Coupons",
+    }
+
     class TenoraReport(FPDF):
         def header(self):
-            self.set_font("Courier", "B", 14)
-            self.set_text_color(0, 0, 0)
-            self.cell(0, 8, "TENORA - Panel Administrateur", ln=1)
-            self.set_font("Courier", "B", 10)
-            self.set_text_color(60, 60, 60)
-            self.cell(0, 6, f"Rapport : {section.upper()}", ln=1)
+            # Barre de titre noire
+            self.set_fill_color(15, 15, 15)
+            self.rect(0, 0, 210, 18, "F")
+            self.set_font("Courier", "B", 13)
+            self.set_text_color(255, 255, 255)
+            self.set_y(4)
+            self.cell(0, 8, "TENORA  //  Panel Administrateur", ln=1)
+
+            # Sous-titre section
+            self.set_fill_color(245, 245, 245)
+            self.rect(0, 18, 210, 14, "F")
+            self.set_font("Courier", "B", 9)
+            self.set_text_color(20, 20, 20)
+            self.set_y(20)
+            sec_lbl = SECTION_LABELS.get(section, section.upper())
+            self.cell(130, 5, f"  Rapport : {sec_lbl.upper()}", ln=0)
             self.set_font("Courier", "", 8)
             self.set_text_color(100, 100, 100)
-            self.cell(0, 5, f"Periode : {start.strftime('%d/%m/%Y')} -> {end.strftime('%d/%m/%Y')}", ln=1)
-            self.cell(0, 5, f"Genere le {datetime.utcnow().strftime('%d/%m/%Y a %H:%M')} UTC", ln=1)
-            self.ln(3)
+            periode = f"Periode : {start.strftime('%d/%m/%Y')} -> {end.strftime('%d/%m/%Y')}"
+            self.cell(0, 5, periode, ln=1, align="R")
+            self.set_font("Courier", "", 7)
+            self.set_text_color(130, 130, 130)
+            self.set_x(10)
+            self.cell(0, 5, f"  Genere le {datetime.utcnow().strftime('%d/%m/%Y a %H:%M')} UTC", ln=1)
+
+            # Ligne séparatrice
             self.set_draw_color(0, 0, 0)
-            self.set_line_width(0.5)
-            self.line(10, self.get_y(), 200, self.get_y())
-            self.ln(4)
+            self.set_line_width(0.4)
+            self.line(10, 33, 200, 33)
+            self.set_y(37)
 
         def footer(self):
             self.set_y(-12)
             self.set_font("Courier", "", 7)
             self.set_text_color(150, 150, 150)
-            self.cell(0, 5, f"Tenora Panel - Page {self.page_no()}", align="C")
+            self.cell(0, 5, f"Tenora Panel  //  Page {self.page_no()}", align="C")
 
     pdf = TenoraReport()
     pdf.set_margins(10, 15, 10)
@@ -664,96 +684,143 @@ def _make_pdf(section: str, start: datetime, end: datetime, data: dict) -> bytes
         pdf.cell(0, 6, "// INDICATEURS CLES", ln=1)
         pdf.ln(1)
 
-        col_w = 95
-        pairs = [(k, v) for k, v in kpis.items() if not k.endswith("_prev") and not k.endswith("_delta_pct") and "best_day" not in k]
+        pairs = [
+            (k, v) for k, v in kpis.items()
+            if not k.endswith("_prev") and not k.endswith("_delta_pct") and "best_day" not in k
+        ]
+
+        # Largeurs : label 90, valeur 50, répété 2 fois → 2 colonnes de (label|valeur)
+        LBL_W, VAL_W, ROW_H = 90, 50, 6
+        USABLE = LBL_W + VAL_W  # = 140 par colonne × 2 = 280 mais on garde 1 col large
+
+        # Rendu en grille 2 colonnes (label | valeur) côte à côte
         for i in range(0, len(pairs), 2):
             left  = pairs[i]
             right = pairs[i + 1] if i + 1 < len(pairs) else None
-            pdf.set_font("Courier", "", 8)
-            pdf.set_fill_color(240, 240, 240)
-            lbl_l = _kpi_labels.get(left[0], left[0])
+
+            # Colonne gauche
+            lbl_l = _safe(_kpi_labels.get(left[0], left[0]))
             val_l = _safe(left[1]) if left[1] is not None else "-"
-            pdf.cell(col_w, 6, f"  {lbl_l[:38]}", border=1, fill=True)
-            pdf.set_font("Courier", "B", 8)
-            pdf.cell(col_w, 6, f"  {val_l[:35]}", border=1, ln=1)
-            if right:
-                pdf.set_font("Courier", "", 8)
-                lbl_r = _kpi_labels.get(right[0], right[0])
-                val_r = str(right[1]) if right[1] is not None else "—"
-                pdf.set_x(10)
-                # We already advanced a line; back to previous row for 2-col layout
-                # Actually, fpdf doesn't easily do 2-col — just go 1-col for now
-                pass
-        # Simpler: single column
-        pdf.set_y(pdf.get_y() - len(pairs) * 6)  # reset
-        pdf.ln(1)
-        for k, v in pairs:
-            lbl = _safe(_kpi_labels.get(k, k))
-            val = _safe(v) if v is not None else "-"
-            pdf.set_font("Courier", "", 8)
-            pdf.set_fill_color(248, 248, 248)
-            pdf.cell(120, 6, f"  {lbl[:55]}", border="LTB", fill=True)  # already _safe
-            pdf.set_font("Courier", "B", 8)
+            pdf.set_font("Courier", "", 7)
+            pdf.set_fill_color(245, 245, 245)
+            pdf.set_text_color(40, 40, 40)
+            pdf.cell(LBL_W, ROW_H, f"  {lbl_l[:40]}", border=1, fill=True)
+            pdf.set_font("Courier", "B", 7)
             pdf.set_fill_color(255, 255, 255)
-            pdf.cell(70, 6, f"  {val[:30]}", border="RTB", fill=False, ln=1)
+            pdf.cell(VAL_W, ROW_H, f"  {val_l[:22]}", border=1, fill=True)
+
+            # Espacement inter-colonnes
+            pdf.cell(4, ROW_H, "", border=0)
+
+            # Colonne droite (ou vide si impair)
+            if right:
+                lbl_r = _safe(_kpi_labels.get(right[0], right[0]))
+                val_r = _safe(right[1]) if right[1] is not None else "-"
+                pdf.set_font("Courier", "", 7)
+                pdf.set_fill_color(245, 245, 245)
+                pdf.set_text_color(40, 40, 40)
+                pdf.cell(LBL_W, ROW_H, f"  {lbl_r[:40]}", border=1, fill=True)
+                pdf.set_font("Courier", "B", 7)
+                pdf.set_fill_color(255, 255, 255)
+                pdf.cell(VAL_W, ROW_H, f"  {val_r[:22]}", border=1, fill=True)
+
+            pdf.ln()
+
         pdf.ln(5)
 
     # ── Tableau de données ─────────────────────────────────────────────────────
+    # Largeurs de colonnes par section (en mm, total doit être ≤ 190)
     _table_cfg = {
-        "overview":  ("chart",          ["Date", "Commandes", "CA (F)"],                    ["date", "orders", "revenue"]),
-        "orders":    ("daily_breakdown", ["Date", "Complétées", "Attente", "Rejet", "Traitmt", "Remb."], ["date", "completed", "pending", "rejected", "processing", "refunded"]),
-        "revenue":   ("cumulative",      ["Date", "CA (F)", "CA cumulé (F)"],                ["date", "revenue", "cumulative"]),
-        "products":  ("table",           ["Produit", "Catégorie", "Ventes", "CA (F)", "Pan. moy.", "Stock"], ["name", "category", "sales", "revenue", "avg_basket", "stock"]),
-        "customers": ("top_customers",   ["Email", "Commandes", "CA total (F)", "Dernière cmd", "Statut"], ["email_masked", "orders_count", "total_revenue", "last_order_at", "status"]),
-        "coupons":   ("by_coupon",       ["Code", "Type", "Valeur", "Utilisations", "Remise (F)", "Max", "Actif"], ["code", "type", "value", "uses", "remise_total", "max_uses", "is_active"]),
+        "overview":  (
+            "chart",
+            ["Date",       "Commandes", "CA (F)"],
+            ["date",       "orders",    "revenue"],
+            [30, 35, 50],
+        ),
+        "orders": (
+            "daily_breakdown",
+            ["Date",  "Complet.", "Attente", "Rejet", "Traitement", "Remb."],
+            ["date",  "completed","pending", "rejected","processing","refunded"],
+            [30, 28, 28, 28, 32, 28],
+        ),
+        "revenue": (
+            "cumulative",
+            ["Date",  "CA (F)",  "CA cumulé (F)"],
+            ["date",  "revenue", "cumulative"],
+            [35, 55, 60],
+        ),
+        "products": (
+            "table",
+            ["Produit",    "Catégorie",  "Ventes", "CA (F)", "Panier moy.", "Stock"],
+            ["name",       "category",   "sales",  "revenue","avg_basket",  "stock"],
+            [58, 35, 18, 32, 28, 19],
+        ),
+        "customers": (
+            "top_customers",
+            ["Email",        "Cmdes", "CA total (F)", "Dernière cmd", "Statut"],
+            ["email_masked", "orders_count","total_revenue","last_order_at","status"],
+            [58, 18, 38, 38, 28],
+        ),
+        "coupons": (
+            "by_coupon",
+            ["Code",  "Type",  "Valeur", "Utilis.", "Remise (F)", "Max",  "Actif"],
+            ["code",  "type",  "value",  "uses",    "remise_total","max_uses","is_active"],
+            [35, 22, 22, 20, 35, 20, 18],
+        ),
     }
-    data_key, col_labels, col_keys = _table_cfg[section]
+    data_key, col_labels, col_keys, col_widths = _table_cfg[section]
     rows = data.get(data_key, [])
 
     if rows:
-        pdf.set_font("Courier", "B", 10)
+        pdf.set_font("Courier", "B", 9)
         pdf.set_text_color(0, 0, 0)
-        pdf.cell(0, 6, f"// DONNEES ({len(rows)} lignes)", ln=1)
+        pdf.cell(0, 6, f"// DONNEES  ({len(rows)} ligne{'s' if len(rows) > 1 else ''})", ln=1)
         pdf.ln(1)
 
-        n_cols = len(col_labels)
-        usable = 190
-        col_w  = usable / n_cols
+        ROW_H = 5
 
-        # En-tête tableau
+        # En-tête tableau — fond noir, texte blanc
         pdf.set_font("Courier", "B", 7)
-        pdf.set_fill_color(30, 30, 30)
+        pdf.set_fill_color(15, 15, 15)
         pdf.set_text_color(255, 255, 255)
-        for lbl in col_labels:
-            pdf.cell(col_w, 6, f" {_safe(lbl)[:int(col_w // 2)]}", border=1, fill=True)
+        for lbl, w in zip(col_labels, col_widths):
+            max_chars = max(3, int(w / 2.2))
+            txt = _safe(lbl)[:max_chars]
+            pdf.cell(w, ROW_H + 1, f" {txt}", border=1, fill=True)
         pdf.ln()
 
-        # Lignes
-        pdf.set_font("Courier", "", 7)
-        for i, row in enumerate(rows[:80]):
-            pdf.set_fill_color(252, 252, 252) if i % 2 == 0 else pdf.set_fill_color(245, 245, 245)
-            pdf.set_text_color(30, 30, 30)
-            for key in col_keys:
+        # Lignes de données
+        for i, row in enumerate(rows[:100]):
+            if i % 2 == 0:
+                pdf.set_fill_color(252, 252, 252)
+            else:
+                pdf.set_fill_color(243, 243, 243)
+            pdf.set_text_color(25, 25, 25)
+            pdf.set_font("Courier", "", 7)
+            for key, w in zip(col_keys, col_widths):
                 val = row.get(key, "")
-                if val is None:         val = "-"
-                elif val is True:       val = "Oui"
-                elif val is False:      val = "Non"
-                elif isinstance(val, float): val = f"{val:.1f}"
-                else:                   val = str(val)
+                if val is None:               val = "-"
+                elif val is True:             val = "Oui"
+                elif val is False:            val = "Non"
+                elif isinstance(val, float):  val = f"{val:.1f}"
+                else:                         val = str(val)
                 if key == "last_order_at" and val not in ("-", ""):
                     val = val[:10]
                 val = _safe(val)
-                pdf.cell(col_w, 5, f" {val[:int(col_w // 2)]}", border="LR", fill=True)
+                max_chars = max(3, int(w / 2.0))
+                pdf.cell(w, ROW_H, f" {val[:max_chars]}", border="LR", fill=True)
             pdf.ln()
 
-        if len(rows) > 80:
-            pdf.set_font("Courier", "I", 7)
-            pdf.set_text_color(100, 100, 100)
-            pdf.cell(0, 5, f"  ... {len(rows) - 80} lignes supplementaires non affichees (voir export CSV)", ln=1)
+        # Ligne de fermeture du tableau
+        for w in col_widths:
+            pdf.cell(w, 0, "", border="T")
+        pdf.ln(2)
 
-        # Ligne de fermeture
-        pdf.set_draw_color(0, 0, 0)
-        pdf.cell(usable, 0, "", border="T")
+        if len(rows) > 100:
+            pdf.set_font("Courier", "I", 7)
+            pdf.set_text_color(120, 120, 120)
+            pdf.cell(0, 5, f"  ... {len(rows) - 100} lignes supplementaires — voir export CSV", ln=1)
+
         pdf.ln(3)
 
     raw = pdf.output(dest="S")
