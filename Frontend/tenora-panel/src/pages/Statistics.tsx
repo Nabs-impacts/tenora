@@ -602,7 +602,6 @@ function ProductsSection({ params }: { params: Record<string, string> }) {
   const k     = data.kpis ?? {};
   const top   = (data.top_products ?? []) as Array<{ name: string; revenue: number; sales_count: number; category: string }>;
   const tree  = (data.treemap ?? []) as Array<{ name: string; children?: Array<{ name: string; value: number }> }>;
-  const table = (data.table ?? []) as Array<Record<string, unknown>>;
 
   return (
     <>
@@ -687,27 +686,6 @@ function ProductsSection({ params }: { params: Record<string, string> }) {
             </ResponsiveContainer>
           </div>
         )}
-      </ChartFrame>
-
-      <ChartFrame>
-        <ChartTitle text="// Catalogue complet" />
-        <StatsTable
-          rows={table}
-          pageSize={20}
-          columns={[
-            { key: "name",       label: "Produit" },
-            { key: "category",   label: "Catégorie" },
-            { key: "sales",      label: "Ventes",    align: "right" },
-            { key: "revenue",    label: "Revenu (F)", align: "right", render: (r) => fmtMoney(r.revenue as number) },
-            { key: "avg_basket", label: "Panier moy.", align: "right", render: (r) => fmtMoney(r.avg_basket as number) },
-            { key: "stock",      label: "Stock",      align: "right", render: (r) => r.stock == null ? "—" : String(r.stock) },
-            { key: "is_active",  label: "Statut",     align: "center", render: (r) => (
-              <span className={cn("mono text-[10px] px-2 py-0.5 border font-semibold", r.is_active ? "border-success text-success" : "border-muted text-muted-foreground")}>
-                {r.is_active ? "ACTIF" : "INACTIF"}
-              </span>
-            )},
-          ]}
-        />
       </ChartFrame>
     </>
   );

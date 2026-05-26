@@ -10,6 +10,17 @@ v3 :
   - Email du MEILLEUR CLIENT non-censuré (admin uniquement, pour envoi de cadeau).
   - PDF redesign complet « esprit Tenora » : fond sombre, accent néon,
     coins en crochets, eyebrows « // », monospace partout.
+
+v4 :
+  - FIX statistiques produits & catégories : le modèle Order n'a PAS de
+    relation `items` (un Order = 1 product + quantity). On agrège donc
+    directement à partir de `order.product`, `order.quantity` et
+    `order.total_price`.
+  - Top 20 clients : emails affichés EN CLAIR (admin uniquement) — utile
+    pour les évènements / cadeaux.
+  - PDF : fond de page gris-sombre pour contraster avec le noir des
+    cartes / tableaux. Sous-section « Catalogue complet » retirée de
+    l'export PDF Produits (déjà disponible dans l'onglet Produits).
 """
 import csv
 import io
@@ -311,11 +322,12 @@ def stats_revenue(
 
     by_cat: dict = defaultdict(lambda: {"revenue": 0, "orders": 0})
     for r in paying:
-        for it in getattr(r, "items", []) or []:
-            cat = getattr(getattr(it, "product", None), "category", None) or "—"
-            cat_name = getattr(cat, "name", str(cat))
-            by_cat[cat_name]["revenue"] += (getattr(it, "price", 0) or 0) * (getattr(it, "quantity", 0) or 0)
-            by_cat[cat_name]["orders"]  += 1
+        # Le modèle Order est mono-produit (product_id direct), pas de table items.
+        prod = getattr(r, "product", None)
+        cat  = getattr(prod, "category", None) if prod else None
+        cat_name = getattr(cat, "name", None) or "—"
+        by_cat[cat_name]["revenue"] += r.total_price or 0
+        by_cat[cat_name]["orders"]  += 1
     total_cat = sum(v["revenue"] for v in by_cat.values()) or 1
     by_category = [
         {
@@ -366,15 +378,18 @@ def stats_products(
 
     by_prod: dict = defaultdict(lambda: {"sales": 0, "revenue": 0, "name": "", "category": "—"})
     for r in paying:
-        for it in getattr(r, "items", []) or []:
-            p = getattr(it, "product", None)
-            pid = getattr(p, "id", None)
-            if pid is None:
-                continue
-            d = by_prod[pid]
-            d["sales"]   += (getattr(it, "quantity", 0) or 0)
-            d["revenue"] += (getattr(it, "price", 0) or 0) * (getattr(it, "quantity", 0) or 0)
-            d["name"]     = getattr(p, "name", "—")
+        # Order = mono-produit ; on agrège par product_id directement.
+        p = getattr(r, "product", None)
+        pid = getattr(p, "id", None) if p is not None else r.product_id
+        if pid is None:
+            continue
+        qty   = r.quantity or 0
+        gross = r.total_price or 0
+        d = by_prod[pid]
+        d["sales"]   += qty
+        d["revenue"] += gross
+        if p is not None:
+            d["name"]     = getattr(p, "name", "—") or "—"
             cat = getattr(p, "category", None)
             d["category"] = getattr(cat, "name", "—") if cat else "—"
 
@@ -474,12 +489,14 @@ def stats_customers(
         u = users_map.get(uid)
         status = "vip" if v["orders"] >= 5 else ("récurrent" if v["orders"] >= 2 else "nouveau")
         email_raw = u.email if u else None
-        # ─── MEILLEUR CLIENT : email EN CLAIR (pour envoi de cadeau). Les autres
-        # restent masqués dans la liste publique.
+        # ─── Liste réservée à l'admin : on affiche TOUS les emails EN CLAIR
+        # (utile pour évènements / envoi de cadeaux). On garde `is_top` pour
+        # mettre en évidence le client n°1.
         is_top = (idx == 0)
+        full   = _full_email(email_raw)
         top_customers.append({
-            "email":         _full_email(email_raw) if is_top else _mask_email(email_raw),
-            "email_masked":  _mask_email(email_raw),  # rétro-compat front
+            "email":         full,
+            "email_masked":  full,  # rétro-compat front : même valeur (non masquée)
             "is_top":        is_top,
             "orders_count":  v["orders"],
             "total_revenue": round(v["revenue"]),
@@ -651,14 +668,15 @@ def export_csv(
 # ─── EXPORT PDF — esprit TENORA ───────────────────────────────────────────────
 
 # Palette Tenora (RGB)
-_T_BG        = (10, 10, 10)       # fond pages sombres
+_T_PAGE      = (38, 38, 38)       # fond de page : gris-sombre (contraste)
+_T_BG        = (10, 10, 10)       # noir profond : bandeaux header/footer
 _T_INK       = (245, 245, 245)    # texte sur sombre
 _T_INK_DIM   = (170, 170, 170)
 _T_NEON      = (212, 255, 61)     # accent lime
 _T_NEON_INK  = (10, 10, 10)       # texte sur néon
-_T_LINE      = (55, 55, 55)
-_T_CARD      = (20, 20, 20)
-_T_CARD_ALT  = (28, 28, 28)
+_T_LINE      = (65, 65, 65)
+_T_CARD      = (12, 12, 12)       # carte / ligne paire (noir)
+_T_CARD_ALT  = (22, 22, 22)       # ligne impaire (noir un peu plus clair)
 _T_SUCCESS   = (74, 222, 128)
 
 
@@ -691,6 +709,10 @@ def _make_pdf(section: str, start: datetime, end: datetime, data: dict) -> bytes
 
     class TenoraReport(FPDF):
         def header(self):
+            # Fond de page : gris-sombre (contraste avec les cartes/bandeaux noirs)
+            self.set_fill_color(*_T_PAGE)
+            self.rect(0, 0, 210, 297, "F")
+
             # Bandeau noir Tenora
             self.set_fill_color(*_T_BG)
             self.rect(0, 0, 210, 22, "F")
@@ -727,7 +749,7 @@ def _make_pdf(section: str, start: datetime, end: datetime, data: dict) -> bytes
             self.cell(40, 4, datetime.utcnow().strftime("%d/%m/%Y %H:%M UTC"), align="R", ln=1)
 
             # Sous-bandeau section
-            self.set_fill_color(20, 20, 20)
+            self.set_fill_color(*_T_CARD)
             self.rect(0, 23.2, 210, 14, "F")
             # eyebrow
             self.set_font("Courier", "", 7)
@@ -878,10 +900,12 @@ def _make_pdf(section: str, start: datetime, end: datetime, data: dict) -> bytes
             [40, 55, 55],
         ),
         "products": (
-            "table",
-            ["PRODUIT",    "CATEGORIE",  "VENTES", "CA (F)", "PANIER", "STOCK"],
-            ["name",       "category",   "sales",  "revenue","avg_basket",  "stock"],
-            [58, 35, 18, 32, 28, 19],
+            # Catalogue complet retiré du PDF (déjà dispo dans l'onglet Produits).
+            # On expose uniquement le TOP 10 par CA.
+            "top_products",
+            ["PRODUIT",  "CATEGORIE", "VENTES",      "CA (F)"],
+            ["name",     "category",  "sales_count", "revenue"],
+            [80, 50, 25, 35],
         ),
         "customers": (
             "top_customers",
