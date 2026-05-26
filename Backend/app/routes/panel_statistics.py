@@ -34,6 +34,22 @@ try:
 except ImportError:
     _HAS_FPDF = False
 
+
+def _safe(text) -> str:
+    """Remplace les caractères non-latin-1 (em-dash, guillemets…) pour fpdf2 core fonts."""
+    return (
+        str(text)
+        .replace("\u2014", "-")   # em dash  —
+        .replace("\u2013", "-")   # en dash  –
+        .replace("\u2019", "'")   # '
+        .replace("\u2018", "'")   # '
+        .replace("\u201c", '"')   # "
+        .replace("\u201d", '"')   # "
+        .replace("\u2026", "...") # …
+        .encode("latin-1", errors="replace")
+        .decode("latin-1")
+    )
+
 stats_router = APIRouter(prefix="/panel/statistics", tags=["Admin Panel — Statistics"])
 
 _VALID_SECTIONS = {"overview", "orders", "revenue", "products", "customers", "coupons"}
@@ -346,9 +362,11 @@ def stats_products(
     top_seller  = max(enriched, key=lambda x: x["sales_count"], default=None)
     top_revenue = enriched[0] if enriched else None
 
-    cat_tree: dict = defaultdict(list)
+    # Agrégation par catégorie (treemap plat : une entrée par catégorie)
+    cat_agg: dict = defaultdict(lambda: {"revenue": 0, "sales": 0})
     for e in enriched:
-        cat_tree[e["category"]].append({"name": e["name"], "value": e["revenue"]})
+        cat_agg[e["category"]]["revenue"] += e["revenue"]
+        cat_agg[e["category"]]["sales"]   += e["sales_count"]
 
     table = [{
         "product_id": e["product_id"], "name": e["name"], "category": e["category"],
@@ -366,9 +384,13 @@ def stats_products(
             "zero_sales_count":   total_products - len(enriched),
         },
         "top_products": enriched[:10],
-        "treemap":      [{"name": cat, "children": items} for cat, items in cat_tree.items()],
-        "table":        table,
-        "total":        len(table),
+        # Treemap plat — une entrée par catégorie, value = CA total de la catégorie
+        "treemap": [
+            {"name": cat, "value": round(v["revenue"]), "sales": v["sales"]}
+            for cat, v in sorted(cat_agg.items(), key=lambda x: x[1]["revenue"], reverse=True)
+        ],
+        "table":  table,
+        "total":  len(table),
     }
 
 
@@ -574,14 +596,14 @@ def _make_pdf(section: str, start: datetime, end: datetime, data: dict) -> bytes
         def header(self):
             self.set_font("Courier", "B", 14)
             self.set_text_color(0, 0, 0)
-            self.cell(0, 8, "TENORA — Panel Administrateur", ln=1)
+            self.cell(0, 8, "TENORA - Panel Administrateur", ln=1)
             self.set_font("Courier", "B", 10)
             self.set_text_color(60, 60, 60)
             self.cell(0, 6, f"Rapport : {section.upper()}", ln=1)
             self.set_font("Courier", "", 8)
             self.set_text_color(100, 100, 100)
-            self.cell(0, 5, f"Période : {start.strftime('%d/%m/%Y')} → {end.strftime('%d/%m/%Y')}", ln=1)
-            self.cell(0, 5, f"Généré le {datetime.utcnow().strftime('%d/%m/%Y à %H:%M')} UTC", ln=1)
+            self.cell(0, 5, f"Periode : {start.strftime('%d/%m/%Y')} -> {end.strftime('%d/%m/%Y')}", ln=1)
+            self.cell(0, 5, f"Genere le {datetime.utcnow().strftime('%d/%m/%Y a %H:%M')} UTC", ln=1)
             self.ln(3)
             self.set_draw_color(0, 0, 0)
             self.set_line_width(0.5)
@@ -592,7 +614,7 @@ def _make_pdf(section: str, start: datetime, end: datetime, data: dict) -> bytes
             self.set_y(-12)
             self.set_font("Courier", "", 7)
             self.set_text_color(150, 150, 150)
-            self.cell(0, 5, f"Tenora Panel — Page {self.page_no()}", align="C")
+            self.cell(0, 5, f"Tenora Panel - Page {self.page_no()}", align="C")
 
     pdf = TenoraReport()
     pdf.set_margins(10, 15, 10)
@@ -639,7 +661,7 @@ def _make_pdf(section: str, start: datetime, end: datetime, data: dict) -> bytes
     if kpis:
         pdf.set_font("Courier", "B", 10)
         pdf.set_text_color(0, 0, 0)
-        pdf.cell(0, 6, "// INDICATEURS CLÉS", ln=1)
+        pdf.cell(0, 6, "// INDICATEURS CLES", ln=1)
         pdf.ln(1)
 
         col_w = 95
@@ -650,7 +672,7 @@ def _make_pdf(section: str, start: datetime, end: datetime, data: dict) -> bytes
             pdf.set_font("Courier", "", 8)
             pdf.set_fill_color(240, 240, 240)
             lbl_l = _kpi_labels.get(left[0], left[0])
-            val_l = str(left[1]) if left[1] is not None else "—"
+            val_l = _safe(left[1]) if left[1] is not None else "-"
             pdf.cell(col_w, 6, f"  {lbl_l[:38]}", border=1, fill=True)
             pdf.set_font("Courier", "B", 8)
             pdf.cell(col_w, 6, f"  {val_l[:35]}", border=1, ln=1)
@@ -666,11 +688,11 @@ def _make_pdf(section: str, start: datetime, end: datetime, data: dict) -> bytes
         pdf.set_y(pdf.get_y() - len(pairs) * 6)  # reset
         pdf.ln(1)
         for k, v in pairs:
-            lbl = _kpi_labels.get(k, k)
-            val = str(v) if v is not None else "—"
+            lbl = _safe(_kpi_labels.get(k, k))
+            val = _safe(v) if v is not None else "-"
             pdf.set_font("Courier", "", 8)
             pdf.set_fill_color(248, 248, 248)
-            pdf.cell(120, 6, f"  {lbl[:55]}", border="LTB", fill=True)
+            pdf.cell(120, 6, f"  {lbl[:55]}", border="LTB", fill=True)  # already _safe
             pdf.set_font("Courier", "B", 8)
             pdf.set_fill_color(255, 255, 255)
             pdf.cell(70, 6, f"  {val[:30]}", border="RTB", fill=False, ln=1)
@@ -691,7 +713,7 @@ def _make_pdf(section: str, start: datetime, end: datetime, data: dict) -> bytes
     if rows:
         pdf.set_font("Courier", "B", 10)
         pdf.set_text_color(0, 0, 0)
-        pdf.cell(0, 6, f"// DONNÉES ({len(rows)} lignes)", ln=1)
+        pdf.cell(0, 6, f"// DONNEES ({len(rows)} lignes)", ln=1)
         pdf.ln(1)
 
         n_cols = len(col_labels)
@@ -703,7 +725,7 @@ def _make_pdf(section: str, start: datetime, end: datetime, data: dict) -> bytes
         pdf.set_fill_color(30, 30, 30)
         pdf.set_text_color(255, 255, 255)
         for lbl in col_labels:
-            pdf.cell(col_w, 6, f" {lbl[:int(col_w // 2)]}", border=1, fill=True)
+            pdf.cell(col_w, 6, f" {_safe(lbl)[:int(col_w // 2)]}", border=1, fill=True)
         pdf.ln()
 
         # Lignes
@@ -713,20 +735,21 @@ def _make_pdf(section: str, start: datetime, end: datetime, data: dict) -> bytes
             pdf.set_text_color(30, 30, 30)
             for key in col_keys:
                 val = row.get(key, "")
-                if val is None:         val = "—"
+                if val is None:         val = "-"
                 elif val is True:       val = "Oui"
                 elif val is False:      val = "Non"
                 elif isinstance(val, float): val = f"{val:.1f}"
                 else:                   val = str(val)
-                if key == "last_order_at" and val != "—":
+                if key == "last_order_at" and val not in ("-", ""):
                     val = val[:10]
+                val = _safe(val)
                 pdf.cell(col_w, 5, f" {val[:int(col_w // 2)]}", border="LR", fill=True)
             pdf.ln()
 
         if len(rows) > 80:
             pdf.set_font("Courier", "I", 7)
             pdf.set_text_color(100, 100, 100)
-            pdf.cell(0, 5, f"  … {len(rows) - 80} lignes supplémentaires non affichées (voir export CSV)", ln=1)
+            pdf.cell(0, 5, f"  ... {len(rows) - 80} lignes supplementaires non affichees (voir export CSV)", ln=1)
 
         # Ligne de fermeture
         pdf.set_draw_color(0, 0, 0)
@@ -749,7 +772,7 @@ def export_pdf(
     if not _HAS_FPDF:
         raise HTTPException(
             status_code=501,
-            detail="Export PDF indisponible — ajouter 'fpdf2' dans requirements.txt et redéployer.",
+            detail="Export PDF indisponible - ajouter fpdf2 dans requirements.txt et redeployer.",
         )
     if section not in _VALID_SECTIONS:
         raise HTTPException(status_code=400, detail="Section invalide.")
