@@ -1,4 +1,5 @@
-// === src/components/panel/stats/StatsTable.tsx — NOUVEAU ===
+// === src/components/panel/stats/StatsTable.tsx ===
+// v2 — wrap dans un conteneur scrollable horizontalement pour mobile.
 import { useMemo, useState } from "react";
 import { ChevronDown, ChevronUp, ChevronsUpDown } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -71,55 +72,59 @@ export function StatsTable<T extends Record<string, unknown>>({
 
   return (
     <div className="border-2 border-border">
-      <Table>
-        <TableHeader>
-          <TableRow className="border-b-2 border-border bg-muted/30 hover:bg-muted/30">
-            {columns.map((c) => (
-              <TableHead
-                key={c.key}
-                onClick={() => toggleSort(c.key, c.sortable)}
-                className={cn(
-                  "eyebrow text-muted-foreground select-none",
-                  c.align === "right" && "text-right",
-                  c.align === "center" && "text-center",
-                  c.sortable !== false && "cursor-pointer hover:text-foreground",
-                )}
-              >
-                <span className="inline-flex items-center gap-1">
-                  {c.label}
-                  {c.sortable !== false && (
-                    sortKey === c.key
-                      ? sortDir === "asc"
-                        ? <ChevronUp className="h-3 w-3" />
-                        : <ChevronDown className="h-3 w-3" />
-                      : <ChevronsUpDown className="h-3 w-3 opacity-40" />
-                  )}
-                </span>
-              </TableHead>
-            ))}
-          </TableRow>
-        </TableHeader>
-        <TableBody>
-          {slice.map((row, i) => (
-            <TableRow key={i} className="border-b border-border/60 hover:bg-muted/20">
+      {/* Scroll horizontal sur mobile — la table reste lisible sans casser
+          la page entière. */}
+      <div className="overflow-x-auto">
+        <Table className="min-w-[640px]">
+          <TableHeader>
+            <TableRow className="border-b-2 border-border bg-muted/30 hover:bg-muted/30">
               {columns.map((c) => (
-                <TableCell
+                <TableHead
                   key={c.key}
+                  onClick={() => toggleSort(c.key, c.sortable)}
                   className={cn(
-                    "mono text-xs",
+                    "eyebrow text-muted-foreground select-none whitespace-nowrap",
                     c.align === "right" && "text-right",
                     c.align === "center" && "text-center",
+                    c.sortable !== false && "cursor-pointer hover:text-foreground",
                   )}
                 >
-                  {c.render ? c.render(row) : String(row[c.key] ?? "—")}
-                </TableCell>
+                  <span className="inline-flex items-center gap-1">
+                    {c.label}
+                    {c.sortable !== false && (
+                      sortKey === c.key
+                        ? sortDir === "asc"
+                          ? <ChevronUp className="h-3 w-3" />
+                          : <ChevronDown className="h-3 w-3" />
+                        : <ChevronsUpDown className="h-3 w-3 opacity-40" />
+                    )}
+                  </span>
+                </TableHead>
               ))}
             </TableRow>
-          ))}
-        </TableBody>
-      </Table>
+          </TableHeader>
+          <TableBody>
+            {slice.map((row, i) => (
+              <TableRow key={i} className="border-b border-border/60 hover:bg-muted/20">
+                {columns.map((c) => (
+                  <TableCell
+                    key={c.key}
+                    className={cn(
+                      "mono text-xs whitespace-nowrap",
+                      c.align === "right" && "text-right",
+                      c.align === "center" && "text-center",
+                    )}
+                  >
+                    {c.render ? c.render(row) : String(row[c.key] ?? "—")}
+                  </TableCell>
+                ))}
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
+      </div>
       {pages > 1 && (
-        <div className="flex items-center justify-between border-t-2 border-border px-3 py-2">
+        <div className="flex items-center justify-between gap-2 flex-wrap border-t-2 border-border px-3 py-2">
           <p className="mono text-[11px] text-muted-foreground">
             Page {safePage} / {pages} — {total} lignes
           </p>

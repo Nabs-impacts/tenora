@@ -1,5 +1,10 @@
 // === src/pages/Statistics.tsx ===
-import { useMemo, useState } from "react";
+// v2 —
+//  • Sidebar transformée en barre d'onglets horizontale scrollable sur < lg
+//  • KPI grid 2-up dès sm pour ne pas étouffer le mobile
+//  • Charts : marges & police d'axe responsives, tooltip lisible
+//  • "MEILLEUR CLIENT" affiche l'email complet (non censuré) — pour cadeau
+import { useMemo } from "react";
 import { useSearchParams } from "react-router-dom";
 import {
   LayoutDashboard, ShoppingCart, Wallet, Package, Users, Tag,
@@ -16,14 +21,14 @@ import {
   useStatisticsProducts, useStatisticsCustomers, useStatisticsCoupons,
 } from "@/lib/queries/admin";
 
-import { StatsKPICard }      from "@/components/panel/stats/StatsKPICard";
+import { StatsKPICard }       from "@/components/panel/stats/StatsKPICard";
 import { StatsSectionHeader } from "@/components/panel/stats/StatsSectionHeader";
 import { PeriodSelector, type Period } from "@/components/panel/stats/PeriodSelector";
-import { ExportButtons }     from "@/components/panel/stats/ExportButtons";
-import { ChartTooltipDark }  from "@/components/panel/stats/ChartTooltipDark";
-import { EmptyChart }        from "@/components/panel/stats/EmptyChart";
-import { LoadingChart }      from "@/components/panel/stats/LoadingChart";
-import { StatsTable }        from "@/components/panel/stats/StatsTable";
+import { ExportButtons }      from "@/components/panel/stats/ExportButtons";
+import { ChartTooltipDark }   from "@/components/panel/stats/ChartTooltipDark";
+import { EmptyChart }         from "@/components/panel/stats/EmptyChart";
+import { LoadingChart }       from "@/components/panel/stats/LoadingChart";
+import { StatsTable }         from "@/components/panel/stats/StatsTable";
 
 // ─── Types / Constantes ───────────────────────────────────────────────────────
 type SectionKey = "overview" | "orders" | "revenue" | "products" | "customers" | "coupons";
@@ -54,7 +59,6 @@ const PRIMARY = "hsl(var(--primary))";
 const BORDER  = "hsl(var(--border))";
 const MUTED   = "hsl(var(--muted-foreground))";
 
-// fontSize augmenté 9 → 11 pour la lisibilité des axes
 const axisStyle = {
   fontSize: 11,
   fontFamily: "'JetBrains Mono', monospace",
@@ -66,59 +70,121 @@ function fmtMoney(n: number | null | undefined): string {
   return `${Math.round(n).toLocaleString("fr-FR")} F`;
 }
 
-// ─── Sidebar ──────────────────────────────────────────────────────────────────
-function StatsSidebar({ active, onSelect }: { active: SectionKey; onSelect: (k: SectionKey) => void }) {
+// ─── Navigation : sidebar (≥ lg) + onglets horizontaux (< lg) ─────────────────
+function StatsNav({
+  active,
+  onSelect,
+}: {
+  active: SectionKey;
+  onSelect: (k: SectionKey) => void;
+}) {
   return (
-    <aside className="w-56 shrink-0 border-2 border-border bg-card h-fit">
-      <div className="px-3 py-3 border-b-2 border-border">
-        <p className="eyebrow text-foreground/70 text-[11px] tracking-widest font-semibold">
-          // SECTIONS
-        </p>
-      </div>
-      <nav className="p-2 space-y-1">
-        {SECTIONS.map((s) => {
-          const isActive = active === s.key;
-          return (
-            <button
-              key={s.key}
-              onClick={() => onSelect(s.key)}
-              className={cn(
-                "w-full flex items-center gap-3 px-3 py-2.5 border-2 transition-all",
-                "mono text-xs uppercase tracking-[0.12em] font-semibold text-left",
-                isActive
-                  ? "border-primary bg-primary text-primary-foreground"
-                  : "border-transparent text-foreground hover:border-border hover:bg-muted/40",
-              )}
-            >
-              <span className={cn("text-[9px] tracking-widest", isActive ? "text-primary-foreground/70" : "text-foreground/50")}>
-                {s.code}
-              </span>
-              <s.icon className="h-4 w-4 shrink-0" strokeWidth={2.5} />
-              <span className="flex-1">{s.label}</span>
-            </button>
-          );
-        })}
+    <>
+      {/* Onglets horizontaux : mobile / tablette */}
+      <nav
+        className="lg:hidden -mx-1 px-1 mb-4 overflow-x-auto no-scrollbar"
+        aria-label="Sections statistiques"
+      >
+        <div className="flex gap-2 min-w-max border-2 border-border bg-card p-1.5">
+          {SECTIONS.map((s) => {
+            const isActive = active === s.key;
+            return (
+              <button
+                key={s.key}
+                onClick={() => onSelect(s.key)}
+                className={cn(
+                  "flex items-center gap-2 px-3 py-2 border-2 transition-all shrink-0",
+                  "mono text-[11px] uppercase tracking-[0.12em] font-semibold",
+                  isActive
+                    ? "border-primary bg-primary text-primary-foreground"
+                    : "border-transparent text-foreground hover:border-border hover:bg-muted/40",
+                )}
+              >
+                <span
+                  className={cn(
+                    "text-[9px] tracking-widest",
+                    isActive
+                      ? "text-primary-foreground/70"
+                      : "text-foreground/50",
+                  )}
+                >
+                  {s.code}
+                </span>
+                <s.icon className="h-4 w-4 shrink-0" strokeWidth={2.5} />
+                <span>{s.label}</span>
+              </button>
+            );
+          })}
+        </div>
       </nav>
-    </aside>
+
+      {/* Sidebar : desktop */}
+      <aside className="hidden lg:block w-56 shrink-0 border-2 border-border bg-card h-fit">
+        <div className="px-3 py-3 border-b-2 border-border">
+          <p className="eyebrow text-foreground/70 text-[11px] tracking-widest font-semibold">
+            // SECTIONS
+          </p>
+        </div>
+        <nav className="p-2 space-y-1">
+          {SECTIONS.map((s) => {
+            const isActive = active === s.key;
+            return (
+              <button
+                key={s.key}
+                onClick={() => onSelect(s.key)}
+                className={cn(
+                  "w-full flex items-center gap-3 px-3 py-2.5 border-2 transition-all",
+                  "mono text-xs uppercase tracking-[0.12em] font-semibold text-left",
+                  isActive
+                    ? "border-primary bg-primary text-primary-foreground"
+                    : "border-transparent text-foreground hover:border-border hover:bg-muted/40",
+                )}
+              >
+                <span
+                  className={cn(
+                    "text-[9px] tracking-widest",
+                    isActive
+                      ? "text-primary-foreground/70"
+                      : "text-foreground/50",
+                  )}
+                >
+                  {s.code}
+                </span>
+                <s.icon className="h-4 w-4 shrink-0" strokeWidth={2.5} />
+                <span className="flex-1">{s.label}</span>
+              </button>
+            );
+          })}
+        </nav>
+      </aside>
+    </>
   );
 }
 
 // ─── ChartFrame ───────────────────────────────────────────────────────────────
 function ChartFrame({ children }: { children: React.ReactNode }) {
-  return <div className="border-2 border-border bg-card p-3">{children}</div>;
+  return (
+    <div className="border-2 border-border bg-card p-2.5 sm:p-3 min-w-0 overflow-hidden">
+      {children}
+    </div>
+  );
 }
 
-// Titre de section dans les charts — meilleure lisibilité
 function ChartTitle({ text }: { text: string }) {
   return (
-    <p className="mono text-xs font-semibold text-foreground/80 tracking-wider mb-2 uppercase">
+    <p className="mono text-[11px] sm:text-xs font-semibold text-foreground/80 tracking-wider mb-2 uppercase">
       {text}
     </p>
   );
 }
 
-// ═════════════════════════════════════════════════════════════════════════════
-// Page principale
+// Hauteurs responsive — un peu plus compactes sur mobile
+const H = {
+  main:    "h-[260px] sm:h-[320px]",
+  medium:  "h-[220px] sm:h-[280px]",
+  small:   "h-[200px] sm:h-[260px]",
+} as const;
+
 // ═════════════════════════════════════════════════════════════════════════════
 export default function Statistics() {
   const [searchParams, setSearchParams] = useSearchParams();
@@ -158,10 +224,11 @@ export default function Statistics() {
   const periodLabel = period === "custom" ? "période précédente" : `${period} précédents`;
 
   return (
-    <div className="flex gap-6 h-full animate-fade-up">
-      <StatsSidebar active={section} onSelect={setSection} />
+    // flex-col sur mobile (nav au-dessus) ; flex-row sur lg+
+    <div className="flex flex-col lg:flex-row gap-4 lg:gap-6 h-full animate-fade-up">
+      <StatsNav active={section} onSelect={setSection} />
 
-      <div className="flex-1 min-w-0 overflow-y-auto space-y-6 pb-12">
+      <div className="flex-1 min-w-0 overflow-y-auto space-y-4 sm:space-y-6 pb-12">
         <StatsSectionHeader
           title={SECTIONS.find((s) => s.key === section)?.label ?? "Statistiques"}
           subtitle="Analyse avancée — données en temps réel"
@@ -184,6 +251,9 @@ export default function Statistics() {
   );
 }
 
+// Grille KPI réutilisable : 2 cols dès sm, 4 cols à partir de xl
+const KPI_GRID = "grid grid-cols-2 xl:grid-cols-4 gap-2.5 sm:gap-3";
+
 // ═════════════════════════════════════════════════════════════════════════════
 // 5.1 — Vue Globale
 // ═════════════════════════════════════════════════════════════════════════════
@@ -193,11 +263,11 @@ function OverviewSection({ params, periodLabel }: { params: Record<string, strin
   if (isLoading) {
     return (
       <>
-        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-3">
+        <div className={KPI_GRID}>
           {Array.from({ length: 4 }).map((_, i) => <LoadingChart key={i} height={96} />)}
         </div>
-        <LoadingChart height={320} />
-        <LoadingChart height={280} />
+        <LoadingChart height={300} />
+        <LoadingChart height={260} />
       </>
     );
   }
@@ -210,7 +280,7 @@ function OverviewSection({ params, periodLabel }: { params: Record<string, strin
 
   return (
     <>
-      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-3">
+      <div className={KPI_GRID}>
         <StatsKPICard label="CHIFFRE D'AFFAIRES" value={fmtMoney(k.revenue)} deltaPct={k.revenue_delta_pct} periodLabel={periodLabel} />
         <StatsKPICard label="COMMANDES"           value={k.orders ?? 0}       deltaPct={k.orders_delta_pct}  periodLabel={periodLabel} />
         <StatsKPICard label="PANIER MOYEN"        value={fmtMoney(k.avg_basket)} deltaPct={k.avg_basket_delta_pct} periodLabel={periodLabel} />
@@ -219,43 +289,47 @@ function OverviewSection({ params, periodLabel }: { params: Record<string, strin
 
       <ChartFrame>
         <ChartTitle text="// Activité — Revenu & Commandes" />
-        {chart.length === 0 ? <EmptyChart height={320} /> : (
-          <ResponsiveContainer width="100%" height={320}>
-            <ComposedChart data={chart} margin={{ top: 10, right: 20, left: 0, bottom: 0 }}>
-              <defs>
-                <linearGradient id="gradRev" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="0%"   stopColor={PRIMARY} stopOpacity={0.5} />
-                  <stop offset="100%" stopColor={PRIMARY} stopOpacity={0}   />
-                </linearGradient>
-              </defs>
-              <CartesianGrid strokeDasharray="3 3" stroke={BORDER} />
-              <XAxis dataKey="date"   tick={axisStyle} stroke={BORDER} />
-              <YAxis yAxisId="left"   tick={axisStyle} stroke={BORDER} />
-              <YAxis yAxisId="right" orientation="right" tick={axisStyle} stroke={BORDER} />
-              <Tooltip content={<ChartTooltipDark />} />
-              <Legend wrapperStyle={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 12 }} />
-              <Area  yAxisId="left"  type="monotone" dataKey="revenue" name="Revenu (F)"  stroke={PRIMARY}    fill="url(#gradRev)" />
-              <Line  yAxisId="right" type="monotone" dataKey="orders"  name="Commandes"   stroke="#3B82F6"     strokeWidth={2} dot={false} />
-            </ComposedChart>
-          </ResponsiveContainer>
+        {chart.length === 0 ? <EmptyChart height={300} /> : (
+          <div className={H.main}>
+            <ResponsiveContainer width="100%" height="100%">
+              <ComposedChart data={chart} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
+                <defs>
+                  <linearGradient id="gradRev" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="0%"   stopColor={PRIMARY} stopOpacity={0.5} />
+                    <stop offset="100%" stopColor={PRIMARY} stopOpacity={0}   />
+                  </linearGradient>
+                </defs>
+                <CartesianGrid strokeDasharray="3 3" stroke={BORDER} />
+                <XAxis dataKey="date"   tick={axisStyle} stroke={BORDER} minTickGap={20} />
+                <YAxis yAxisId="left"   tick={axisStyle} stroke={BORDER} width={45} />
+                <YAxis yAxisId="right" orientation="right" tick={axisStyle} stroke={BORDER} width={35} />
+                <Tooltip content={<ChartTooltipDark />} />
+                <Legend wrapperStyle={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 12 }} />
+                <Area  yAxisId="left"  type="monotone" dataKey="revenue" name="Revenu (F)"  stroke={PRIMARY}    fill="url(#gradRev)" />
+                <Line  yAxisId="right" type="monotone" dataKey="orders"  name="Commandes"   stroke="#3B82F6"     strokeWidth={2} dot={false} />
+              </ComposedChart>
+            </ResponsiveContainer>
+          </div>
         )}
       </ChartFrame>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
         <ChartFrame>
           <ChartTitle text="// Répartition par statut" />
-          {dist.length === 0 ? <EmptyChart height={260} /> : (
-            <ResponsiveContainer width="100%" height={260}>
-              <PieChart>
-                <Pie data={dist} dataKey="count" nameKey="status" innerRadius={55} outerRadius={90} paddingAngle={2}>
-                  {dist.map((d, i) => (
-                    <Cell key={i} fill={STATUS_COLORS[d.status] ?? PRIMARY} stroke={BORDER} strokeWidth={2} />
-                  ))}
-                </Pie>
-                <Tooltip content={<ChartTooltipDark />} />
-                <Legend wrapperStyle={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 11 }} />
-              </PieChart>
-            </ResponsiveContainer>
+          {dist.length === 0 ? <EmptyChart height={240} /> : (
+            <div className={H.small}>
+              <ResponsiveContainer width="100%" height="100%">
+                <PieChart>
+                  <Pie data={dist} dataKey="count" nameKey="status" innerRadius={45} outerRadius={80} paddingAngle={2}>
+                    {dist.map((d, i) => (
+                      <Cell key={i} fill={STATUS_COLORS[d.status] ?? PRIMARY} stroke={BORDER} strokeWidth={2} />
+                    ))}
+                  </Pie>
+                  <Tooltip content={<ChartTooltipDark />} />
+                  <Legend wrapperStyle={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 11 }} />
+                </PieChart>
+              </ResponsiveContainer>
+            </div>
           )}
         </ChartFrame>
 
@@ -305,7 +379,7 @@ function OrdersSection({ params }: { params: Record<string, string> }) {
 
   return (
     <>
-      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-3">
+      <div className={KPI_GRID}>
         <StatsKPICard label="TOTAL COMMANDES"    value={k.total ?? 0} />
         <StatsKPICard label="AUJOURD'HUI"         value={k.today ?? 0} />
         <StatsKPICard label="TAUX DE REJET"       value={`${(k.rejection_rate ?? 0).toFixed(1)}`} suffix="%" />
@@ -314,41 +388,45 @@ function OrdersSection({ params }: { params: Record<string, string> }) {
 
       <ChartFrame>
         <ChartTitle text="// Ventilation quotidienne par statut" />
-        {daily.length === 0 ? <EmptyChart height={280} /> : (
-          <ResponsiveContainer width="100%" height={280}>
-            <BarChart data={daily}>
-              <CartesianGrid strokeDasharray="3 3" stroke={BORDER} />
-              <XAxis dataKey="date"       tick={axisStyle} stroke={BORDER} />
-              <YAxis                      tick={axisStyle} stroke={BORDER} />
-              <Tooltip content={<ChartTooltipDark />} />
-              <Legend wrapperStyle={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 12 }} />
-              <Bar dataKey="completed" name="Complétées"    fill={STATUS_COLORS.completed} />
-              <Bar dataKey="pending"   name="En attente"    fill={STATUS_COLORS.pending}   />
-              <Bar dataKey="rejected"  name="Rejetées"      fill={STATUS_COLORS.rejected}  />
-              <Bar dataKey="refunded"  name="Remboursées"   fill={STATUS_COLORS.refunded}  />
-            </BarChart>
-          </ResponsiveContainer>
+        {daily.length === 0 ? <EmptyChart height={260} /> : (
+          <div className={H.medium}>
+            <ResponsiveContainer width="100%" height="100%">
+              <BarChart data={daily} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
+                <CartesianGrid strokeDasharray="3 3" stroke={BORDER} />
+                <XAxis dataKey="date"       tick={axisStyle} stroke={BORDER} minTickGap={20} />
+                <YAxis                      tick={axisStyle} stroke={BORDER} width={35} />
+                <Tooltip content={<ChartTooltipDark />} />
+                <Legend wrapperStyle={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 12 }} />
+                <Bar dataKey="completed" name="Complétées"    fill={STATUS_COLORS.completed} />
+                <Bar dataKey="pending"   name="En attente"    fill={STATUS_COLORS.pending}   />
+                <Bar dataKey="rejected"  name="Rejetées"      fill={STATUS_COLORS.rejected}  />
+                <Bar dataKey="refunded"  name="Remboursées"   fill={STATUS_COLORS.refunded}  />
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
         )}
       </ChartFrame>
 
       <ChartFrame>
         <ChartTitle text="// Évolution quotidienne (lissée)" />
-        {dailyTotals.length === 0 ? <EmptyChart height={240} /> : (
-          <ResponsiveContainer width="100%" height={240}>
-            <LineChart data={dailyTotals}>
-              <CartesianGrid strokeDasharray="3 3" stroke={BORDER} />
-              <XAxis dataKey="date" tick={axisStyle} stroke={BORDER} />
-              <YAxis                tick={axisStyle} stroke={BORDER} />
-              <Tooltip content={<ChartTooltipDark />} />
-              <ReferenceLine
-                y={avg}
-                stroke={MUTED}
-                strokeDasharray="4 4"
-                label={{ value: `moy ${avg.toFixed(1)}`, fill: MUTED, fontSize: 11, fontFamily: "'JetBrains Mono', monospace" }}
-              />
-              <Line type="monotone" dataKey="total" name="Total" stroke={PRIMARY} strokeWidth={2} dot={false} />
-            </LineChart>
-          </ResponsiveContainer>
+        {dailyTotals.length === 0 ? <EmptyChart height={220} /> : (
+          <div className={H.medium}>
+            <ResponsiveContainer width="100%" height="100%">
+              <LineChart data={dailyTotals} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
+                <CartesianGrid strokeDasharray="3 3" stroke={BORDER} />
+                <XAxis dataKey="date" tick={axisStyle} stroke={BORDER} minTickGap={20} />
+                <YAxis                tick={axisStyle} stroke={BORDER} width={35} />
+                <Tooltip content={<ChartTooltipDark />} />
+                <ReferenceLine
+                  y={avg}
+                  stroke={MUTED}
+                  strokeDasharray="4 4"
+                  label={{ value: `moy ${avg.toFixed(1)}`, fill: MUTED, fontSize: 11, fontFamily: "'JetBrains Mono', monospace" }}
+                />
+                <Line type="monotone" dataKey="total" name="Total" stroke={PRIMARY} strokeWidth={2} dot={false} />
+              </LineChart>
+            </ResponsiveContainer>
+          </div>
         )}
         {maxPoint.date && (
           <p className="mono text-xs text-foreground/70 mt-2">
@@ -414,7 +492,7 @@ function RevenueSection({ params }: { params: Record<string, string> }) {
 
   return (
     <>
-      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-3">
+      <div className={KPI_GRID}>
         <StatsKPICard label="CHIFFRE D'AFFAIRES"      value={fmtMoney(k.total_revenue)} />
         <StatsKPICard label="REVENU JOURNALIER MOY."  value={fmtMoney(k.daily_avg)} />
         <StatsKPICard label="MEILLEURE JOURNÉE"       value={k.best_day?.date ?? "—"} suffix={k.best_day?.revenue ? ` · ${fmtMoney(k.best_day.revenue)}` : ""} />
@@ -423,61 +501,67 @@ function RevenueSection({ params }: { params: Record<string, string> }) {
 
       <ChartFrame>
         <ChartTitle text="// Chiffre d'affaires cumulé" />
-        {cumulative.length === 0 ? <EmptyChart height={300} /> : (
-          <ResponsiveContainer width="100%" height={300}>
-            <AreaChart data={cumulative}>
-              <defs>
-                <linearGradient id="gradCum" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="0%"   stopColor="#22C55E" stopOpacity={0.6} />
-                  <stop offset="100%" stopColor="#22C55E" stopOpacity={0}   />
-                </linearGradient>
-              </defs>
-              <CartesianGrid strokeDasharray="3 3" stroke={BORDER} />
-              <XAxis dataKey="date"       tick={axisStyle} stroke={BORDER} />
-              <YAxis                      tick={axisStyle} stroke={BORDER} />
-              <Tooltip content={<ChartTooltipDark />} />
-              <Area type="monotone" dataKey="cumulative" name="CA cumulé (F)" stroke="#22C55E" fill="url(#gradCum)" />
-            </AreaChart>
-          </ResponsiveContainer>
+        {cumulative.length === 0 ? <EmptyChart height={280} /> : (
+          <div className={H.main}>
+            <ResponsiveContainer width="100%" height="100%">
+              <AreaChart data={cumulative} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
+                <defs>
+                  <linearGradient id="gradCum" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="0%"   stopColor="#22C55E" stopOpacity={0.6} />
+                    <stop offset="100%" stopColor="#22C55E" stopOpacity={0}   />
+                  </linearGradient>
+                </defs>
+                <CartesianGrid strokeDasharray="3 3" stroke={BORDER} />
+                <XAxis dataKey="date"       tick={axisStyle} stroke={BORDER} minTickGap={20} />
+                <YAxis                      tick={axisStyle} stroke={BORDER} width={45} />
+                <Tooltip content={<ChartTooltipDark />} />
+                <Area type="monotone" dataKey="cumulative" name="CA cumulé (F)" stroke="#22C55E" fill="url(#gradCum)" />
+              </AreaChart>
+            </ResponsiveContainer>
+          </div>
         )}
       </ChartFrame>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
         <ChartFrame>
           <ChartTitle text="// Par méthode de paiement" />
-          {byMethod.length === 0 ? <EmptyChart height={260} /> : (
-            <ResponsiveContainer width="100%" height={260}>
-              <BarChart data={byMethod}>
-                <CartesianGrid strokeDasharray="3 3" stroke={BORDER} />
-                <XAxis dataKey="method"                    tick={axisStyle} stroke={BORDER} />
-                <YAxis yAxisId="left"                      tick={axisStyle} stroke={BORDER} />
-                <YAxis yAxisId="right" orientation="right" tick={axisStyle} stroke={BORDER} />
-                <Tooltip content={<ChartTooltipDark />} />
-                <Legend wrapperStyle={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 12 }} />
-                <Bar yAxisId="left"  dataKey="revenue" name="Revenu (F)"  fill={PRIMARY}    />
-                <Bar yAxisId="right" dataKey="orders"  name="Commandes"   fill="#3B82F6"    />
-              </BarChart>
-            </ResponsiveContainer>
+          {byMethod.length === 0 ? <EmptyChart height={240} /> : (
+            <div className={H.small}>
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart data={byMethod} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
+                  <CartesianGrid strokeDasharray="3 3" stroke={BORDER} />
+                  <XAxis dataKey="method"                    tick={axisStyle} stroke={BORDER} />
+                  <YAxis yAxisId="left"                      tick={axisStyle} stroke={BORDER} width={45} />
+                  <YAxis yAxisId="right" orientation="right" tick={axisStyle} stroke={BORDER} width={35} />
+                  <Tooltip content={<ChartTooltipDark />} />
+                  <Legend wrapperStyle={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 12 }} />
+                  <Bar yAxisId="left"  dataKey="revenue" name="Revenu (F)"  fill={PRIMARY}    />
+                  <Bar yAxisId="right" dataKey="orders"  name="Commandes"   fill="#3B82F6"    />
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
           )}
         </ChartFrame>
 
         <ChartFrame>
           <ChartTitle text="// Heure de commande × Montant" />
-          {scatter.length === 0 ? <EmptyChart height={260} /> : (
-            <ResponsiveContainer width="100%" height={260}>
-              <ScatterChart>
-                <CartesianGrid strokeDasharray="3 3" stroke={BORDER} />
-                <XAxis dataKey="hour"   name="Heure"   domain={[0, 23]} tick={axisStyle} stroke={BORDER} />
-                <YAxis dataKey="amount" name="Montant"                   tick={axisStyle} stroke={BORDER} />
-                <ZAxis range={[40, 40]} />
-                <Tooltip content={<ChartTooltipDark />} cursor={{ strokeDasharray: "3 3" }} />
-                <Scatter data={scatter} fill={PRIMARY}>
-                  {scatter.map((p, i) => (
-                    <Cell key={i} fill={STATUS_COLORS[p.status] ?? PRIMARY} />
-                  ))}
-                </Scatter>
-              </ScatterChart>
-            </ResponsiveContainer>
+          {scatter.length === 0 ? <EmptyChart height={240} /> : (
+            <div className={H.small}>
+              <ResponsiveContainer width="100%" height="100%">
+                <ScatterChart margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
+                  <CartesianGrid strokeDasharray="3 3" stroke={BORDER} />
+                  <XAxis dataKey="hour"   name="Heure"   domain={[0, 23]} tick={axisStyle} stroke={BORDER} />
+                  <YAxis dataKey="amount" name="Montant"                   tick={axisStyle} stroke={BORDER} width={45} />
+                  <ZAxis range={[40, 40]} />
+                  <Tooltip content={<ChartTooltipDark />} cursor={{ strokeDasharray: "3 3" }} />
+                  <Scatter data={scatter} fill={PRIMARY}>
+                    {scatter.map((p, i) => (
+                      <Cell key={i} fill={STATUS_COLORS[p.status] ?? PRIMARY} />
+                    ))}
+                  </Scatter>
+                </ScatterChart>
+              </ResponsiveContainer>
+            </div>
           )}
         </ChartFrame>
       </div>
@@ -522,7 +606,7 @@ function ProductsSection({ params }: { params: Record<string, string> }) {
 
   return (
     <>
-      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-3">
+      <div className={KPI_GRID}>
         <StatsKPICard label="MEILLEURE VENTE (QTÉ)" value={k.top_seller_name ?? "—"}  suffix={k.top_seller_qty  ? ` · ${k.top_seller_qty}` : ""} />
         <StatsKPICard label="MEILLEUR REVENU"        value={k.top_revenue_name ?? "—"} suffix={k.top_revenue_amount ? ` · ${fmtMoney(k.top_revenue_amount)}` : ""} />
         <StatsKPICard label="TAUX PRODUITS ACTIFS"   value={`${(k.active_rate_pct ?? 0).toFixed(1)}`} suffix="%" />
@@ -531,25 +615,77 @@ function ProductsSection({ params }: { params: Record<string, string> }) {
 
       <ChartFrame>
         <ChartTitle text="// Top 10 produits par chiffre d'affaires" />
-        {top.length === 0 ? <EmptyChart height={320} /> : (
-          <ResponsiveContainer width="100%" height={Math.max(240, top.length * 40)}>
-            <BarChart data={top.slice(0, 10)} layout="vertical" margin={{ left: 100, right: 30 }}>
-              <CartesianGrid strokeDasharray="3 3" stroke={BORDER} />
-              <XAxis type="number"   tick={axisStyle} stroke={BORDER} />
-              <YAxis type="category" dataKey="name" tick={axisStyle} stroke={BORDER} width={140} />
-              <Tooltip content={<ChartTooltipDark />} />
-              <Bar dataKey="revenue" name="Revenu (F)" fill={PRIMARY} />
-            </BarChart>
-          </ResponsiveContainer>
+        {top.length === 0 ? <EmptyChart height={300} /> : (
+          <div style={{ height: Math.max(240, top.length * 40) }}>
+            <ResponsiveContainer width="100%" height="100%">
+              <BarChart data={top.slice(0, 10)} layout="vertical" margin={{ left: 80, right: 16 }}>
+                <CartesianGrid strokeDasharray="3 3" stroke={BORDER} />
+                <XAxis type="number"   tick={axisStyle} stroke={BORDER} />
+                <YAxis type="category" dataKey="name" tick={axisStyle} stroke={BORDER} width={120} />
+                <Tooltip content={<ChartTooltipDark />} />
+                <Bar dataKey="revenue" name="Revenu (F)" fill={PRIMARY} />
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
         )}
       </ChartFrame>
 
       <ChartFrame>
         <ChartTitle text="// Répartition par catégorie (Treemap)" />
-        {tree.length === 0 ? <EmptyChart height={300} /> : (
-          <ResponsiveContainer width="100%" height={300}>
-            <Treemap data={tree} dataKey="value" stroke={BORDER} fill={PRIMARY} aspectRatio={4 / 3} />
-          </ResponsiveContainer>
+        {tree.length === 0 ? <EmptyChart height={280} /> : (
+          <div className="h-[260px] sm:h-[300px]">
+            <ResponsiveContainer width="100%" height="100%">
+              <Treemap
+                data={tree}
+                dataKey="value"
+                stroke={BORDER}
+                fill={PRIMARY}
+                aspectRatio={4 / 3}
+                isAnimationActive={false}
+                content={({ x, y, width, height, name, value }: {
+                  x?: number; y?: number; width?: number; height?: number;
+                  name?: string; value?: number;
+                }) => {
+                  const w = width ?? 0;
+                  const h = height ?? 0;
+                  if (w < 20 || h < 20) return null;
+                  return (
+                    <g>
+                      <rect
+                        x={x} y={y} width={w} height={h}
+                        fill={PRIMARY} stroke={BORDER} strokeWidth={2}
+                      />
+                      {w > 60 && h > 28 && (
+                        <>
+                          <text
+                            x={(x ?? 0) + 8} y={(y ?? 0) + 18}
+                            fill="hsl(var(--primary-foreground))"
+                            fontSize={11}
+                            fontFamily="'JetBrains Mono', monospace"
+                            fontWeight="bold"
+                          >
+                            {String(name ?? "").length > Math.floor(w / 7)
+                              ? String(name ?? "").slice(0, Math.floor(w / 7)) + "…"
+                              : String(name ?? "")}
+                          </text>
+                          {h > 44 && (
+                            <text
+                              x={(x ?? 0) + 8} y={(y ?? 0) + 34}
+                              fill="hsl(var(--primary-foreground) / 0.75)"
+                              fontSize={9}
+                              fontFamily="'JetBrains Mono', monospace"
+                            >
+                              {fmtMoney(value as number)}
+                            </text>
+                          )}
+                        </>
+                      )}
+                    </g>
+                  );
+                }}
+              />
+            </ResponsiveContainer>
+          </div>
         )}
       </ChartFrame>
 
@@ -578,7 +714,7 @@ function ProductsSection({ params }: { params: Record<string, string> }) {
 }
 
 // ═════════════════════════════════════════════════════════════════════════════
-// 5.5 — Clients
+// 5.5 — Clients  (email du meilleur client en CLAIR pour envoi de cadeau)
 // ═════════════════════════════════════════════════════════════════════════════
 function CustomersSection({ params }: { params: Record<string, string> }) {
   const { data, isLoading } = useStatisticsCustomers(params);
@@ -590,43 +726,58 @@ function CustomersSection({ params }: { params: Record<string, string> }) {
   const dist      = (data.orders_distribution ?? []) as Array<{ bucket: string; label: string; customer_count: number }>;
   const top       = (data.top_customers ?? []) as Array<Record<string, unknown>>;
 
+  // Email du meilleur client : on prend la nouvelle clé non censurée si
+  // disponible, sinon on retombe (rétro-compat) sur l'ancienne masquée.
+  const bestEmail =
+    (k.top_customer_email as string | undefined) ??
+    (k.top_customer_email_masked as string | undefined) ??
+    "—";
+
   return (
     <>
-      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-3">
+      <div className={KPI_GRID}>
         <StatsKPICard label="NOUVEAUX CLIENTS"     value={k.new_customers ?? 0} />
         <StatsKPICard label="CLIENTS RÉCURRENTS"   value={k.returning_customers ?? 0} />
         <StatsKPICard label="TAUX DE RÉTENTION"    value={`${(k.retention_rate_pct ?? 0).toFixed(1)}`} suffix="%" />
-        <StatsKPICard label="MEILLEUR CLIENT"       value={k.top_customer_email_masked ?? "—"} suffix={k.top_customer_revenue ? ` · ${fmtMoney(k.top_customer_revenue)}` : ""} />
+        <StatsKPICard
+          label="MEILLEUR CLIENT"
+          value={bestEmail}
+          suffix={k.top_customer_revenue ? ` · ${fmtMoney(k.top_customer_revenue)}` : ""}
+        />
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
         <ChartFrame>
           <ChartTitle text="// Nouveaux clients / jour" />
-          {newPerDay.length === 0 ? <EmptyChart height={260} /> : (
-            <ResponsiveContainer width="100%" height={260}>
-              <LineChart data={newPerDay}>
-                <CartesianGrid strokeDasharray="3 3" stroke={BORDER} />
-                <XAxis dataKey="date"      tick={axisStyle} stroke={BORDER} />
-                <YAxis                     tick={axisStyle} stroke={BORDER} />
-                <Tooltip content={<ChartTooltipDark />} />
-                <Line type="monotone" dataKey="new_users" name="Nouveaux clients" stroke={PRIMARY} strokeWidth={2} dot={false} />
-              </LineChart>
-            </ResponsiveContainer>
+          {newPerDay.length === 0 ? <EmptyChart height={240} /> : (
+            <div className={H.small}>
+              <ResponsiveContainer width="100%" height="100%">
+                <LineChart data={newPerDay} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
+                  <CartesianGrid strokeDasharray="3 3" stroke={BORDER} />
+                  <XAxis dataKey="date"      tick={axisStyle} stroke={BORDER} minTickGap={20} />
+                  <YAxis                     tick={axisStyle} stroke={BORDER} width={35} />
+                  <Tooltip content={<ChartTooltipDark />} />
+                  <Line type="monotone" dataKey="new_users" name="Nouveaux clients" stroke={PRIMARY} strokeWidth={2} dot={false} />
+                </LineChart>
+              </ResponsiveContainer>
+            </div>
           )}
         </ChartFrame>
 
         <ChartFrame>
           <ChartTitle text="// Répartition par nombre de commandes" />
-          {dist.length === 0 ? <EmptyChart height={260} /> : (
-            <ResponsiveContainer width="100%" height={260}>
-              <BarChart data={dist}>
-                <CartesianGrid strokeDasharray="3 3" stroke={BORDER} />
-                <XAxis dataKey="label"      tick={axisStyle} stroke={BORDER} />
-                <YAxis                      tick={axisStyle} stroke={BORDER} />
-                <Tooltip content={<ChartTooltipDark />} />
-                <Bar dataKey="customer_count" name="Nombre de clients" fill={PRIMARY} />
-              </BarChart>
-            </ResponsiveContainer>
+          {dist.length === 0 ? <EmptyChart height={240} /> : (
+            <div className={H.small}>
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart data={dist} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
+                  <CartesianGrid strokeDasharray="3 3" stroke={BORDER} />
+                  <XAxis dataKey="label"      tick={axisStyle} stroke={BORDER} />
+                  <YAxis                      tick={axisStyle} stroke={BORDER} width={35} />
+                  <Tooltip content={<ChartTooltipDark />} />
+                  <Bar dataKey="customer_count" name="Nombre de clients" fill={PRIMARY} />
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
           )}
         </ChartFrame>
       </div>
@@ -637,7 +788,23 @@ function CustomersSection({ params }: { params: Record<string, string> }) {
           rows={top}
           pageSize={20}
           columns={[
-            { key: "email_masked",   label: "Email" },
+            // Affiche email complet si fourni (top client), sinon version masquée.
+            { key: "email_masked",   label: "Email", render: (r) => {
+              const fullEmail = (r.email as string | undefined) ?? "";
+              const masked    = (r.email_masked as string | undefined) ?? "—";
+              const isTop     = Boolean(r.is_top);
+              const display   = isTop && fullEmail ? fullEmail : masked;
+              return (
+                <span className={cn("mono", isTop && "text-primary font-semibold")}>
+                  {display}
+                  {isTop && (
+                    <span className="ml-2 mono text-[9px] px-1.5 py-0.5 border border-primary text-primary uppercase tracking-wider">
+                      TOP
+                    </span>
+                  )}
+                </span>
+              );
+            }},
             { key: "orders_count",   label: "Commandes",     align: "right" },
             { key: "total_revenue",  label: "Revenu total (F)", align: "right", render: (r) => fmtMoney(r.total_revenue as number) },
             { key: "last_order_at",  label: "Dernière commande", render: (r) => r.last_order_at ? String(r.last_order_at).slice(0, 10) : "—" },
@@ -668,7 +835,7 @@ function CouponsSection({ params }: { params: Record<string, string> }) {
 
   return (
     <>
-      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-3">
+      <div className={KPI_GRID}>
         <StatsKPICard label="COUPONS ACTIFS"      value={k.active_count ?? 0} />
         <StatsKPICard label="UTILISATIONS"         value={k.total_uses ?? 0} />
         <StatsKPICard label="REMISES ACCORDÉES"    value={fmtMoney(k.total_discounts_granted)} />
@@ -678,31 +845,35 @@ function CouponsSection({ params }: { params: Record<string, string> }) {
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
         <ChartFrame>
           <ChartTitle text="// Top 10 — Utilisations" />
-          {top10.length === 0 ? <EmptyChart height={260} /> : (
-            <ResponsiveContainer width="100%" height={260}>
-              <BarChart data={top10}>
-                <CartesianGrid strokeDasharray="3 3" stroke={BORDER} />
-                <XAxis dataKey="code"     tick={axisStyle} stroke={BORDER} />
-                <YAxis                    tick={axisStyle} stroke={BORDER} />
-                <Tooltip content={<ChartTooltipDark />} />
-                <Bar dataKey="uses" name="Utilisations" fill={PRIMARY} />
-              </BarChart>
-            </ResponsiveContainer>
+          {top10.length === 0 ? <EmptyChart height={240} /> : (
+            <div className={H.small}>
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart data={top10} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
+                  <CartesianGrid strokeDasharray="3 3" stroke={BORDER} />
+                  <XAxis dataKey="code"     tick={axisStyle} stroke={BORDER} />
+                  <YAxis                    tick={axisStyle} stroke={BORDER} width={35} />
+                  <Tooltip content={<ChartTooltipDark />} />
+                  <Bar dataKey="uses" name="Utilisations" fill={PRIMARY} />
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
           )}
         </ChartFrame>
 
         <ChartFrame>
           <ChartTitle text="// Remises accordées par jour" />
-          {daily.length === 0 ? <EmptyChart height={260} /> : (
-            <ResponsiveContainer width="100%" height={260}>
-              <LineChart data={daily}>
-                <CartesianGrid strokeDasharray="3 3" stroke={BORDER} />
-                <XAxis dataKey="date"          tick={axisStyle} stroke={BORDER} />
-                <YAxis                         tick={axisStyle} stroke={BORDER} />
-                <Tooltip content={<ChartTooltipDark />} />
-                <Line type="monotone" dataKey="discount_amount" name="Remise (F)" stroke="#8B5CF6" strokeWidth={2} dot={false} />
-              </LineChart>
-            </ResponsiveContainer>
+          {daily.length === 0 ? <EmptyChart height={240} /> : (
+            <div className={H.small}>
+              <ResponsiveContainer width="100%" height="100%">
+                <LineChart data={daily} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
+                  <CartesianGrid strokeDasharray="3 3" stroke={BORDER} />
+                  <XAxis dataKey="date"          tick={axisStyle} stroke={BORDER} minTickGap={20} />
+                  <YAxis                         tick={axisStyle} stroke={BORDER} width={45} />
+                  <Tooltip content={<ChartTooltipDark />} />
+                  <Line type="monotone" dataKey="discount_amount" name="Remise (F)" stroke="#8B5CF6" strokeWidth={2} dot={false} />
+                </LineChart>
+              </ResponsiveContainer>
+            </div>
           )}
         </ChartFrame>
       </div>

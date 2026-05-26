@@ -1,4 +1,6 @@
-// === src/components/panel/stats/PeriodSelector.tsx — NOUVEAU ===
+// === src/components/panel/stats/PeriodSelector.tsx ===
+// v2 — scrollable horizontalement sur mobile, inputs date qui ne débordent
+// jamais.
 import { useState } from "react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -14,7 +16,7 @@ interface Props {
 }
 
 const PRESETS: { value: Period; label: string }[] = [
-  { value: "7j",  label: "7J" },
+  { value: "7j", label: "7J" },
   { value: "30j", label: "30J" },
   { value: "90j", label: "90J" },
   { value: "12m", label: "12M" },
@@ -25,14 +27,16 @@ export function PeriodSelector({ period, dateFrom, dateTo, onChange }: Props) {
   const [localTo, setLocalTo] = useState(dateTo);
 
   return (
-    <div className="flex items-center gap-2 flex-wrap">
-      <div className="flex border-2 border-border">
+    <div className="flex items-center gap-2 flex-wrap max-w-full">
+      <div className="flex border-2 border-border overflow-x-auto no-scrollbar max-w-full">
         {PRESETS.map((p) => (
           <button
             key={p.value}
-            onClick={() => onChange({ period: p.value, date_from: "", date_to: "" })}
+            onClick={() =>
+              onChange({ period: p.value, date_from: "", date_to: "" })
+            }
             className={cn(
-              "mono text-xs uppercase tracking-wider px-3 py-1.5 border-r-2 border-border last:border-r-0 transition-colors",
+              "mono text-[11px] sm:text-xs uppercase tracking-wider px-2.5 sm:px-3 py-1.5 border-r-2 border-border last:border-r-0 transition-colors shrink-0",
               period === p.value
                 ? "bg-primary text-primary-foreground"
                 : "bg-background text-foreground hover:bg-muted"
@@ -42,9 +46,11 @@ export function PeriodSelector({ period, dateFrom, dateTo, onChange }: Props) {
           </button>
         ))}
         <button
-          onClick={() => onChange({ period: "custom", date_from: localFrom, date_to: localTo })}
+          onClick={() =>
+            onChange({ period: "custom", date_from: localFrom, date_to: localTo })
+          }
           className={cn(
-            "mono text-xs uppercase tracking-wider px-3 py-1.5 transition-colors",
+            "mono text-[11px] sm:text-xs uppercase tracking-wider px-2.5 sm:px-3 py-1.5 transition-colors shrink-0",
             period === "custom"
               ? "bg-primary text-primary-foreground"
               : "bg-background text-foreground hover:bg-muted"
@@ -55,19 +61,19 @@ export function PeriodSelector({ period, dateFrom, dateTo, onChange }: Props) {
       </div>
 
       {period === "custom" && (
-        <div className="flex items-center gap-1">
+        <div className="flex items-center gap-1 flex-wrap">
           <Input
             type="date"
             value={localFrom}
             onChange={(e) => setLocalFrom(e.target.value)}
-            className="mono text-xs h-8 w-36 rounded-none border-2"
+            className="mono text-xs h-8 w-[8.5rem] sm:w-36 rounded-none border-2"
           />
           <span className="mono text-muted-foreground">→</span>
           <Input
             type="date"
             value={localTo}
             onChange={(e) => setLocalTo(e.target.value)}
-            className="mono text-xs h-8 w-36 rounded-none border-2"
+            className="mono text-xs h-8 w-[8.5rem] sm:w-36 rounded-none border-2"
           />
           <Button
             size="sm"

@@ -6,9 +6,10 @@ Routes statistiques avancées pour le panel admin Tenora.
 Sections : overview, orders, revenue, products, customers, coupons.
 Export   : CSV + PDF (fpdf2 requis — ajouter dans requirements.txt).
 
-Optimisations v2 :
-  - stats_overview : 4 requêtes DB → 2 (fetch unique par fenêtre)
-  - PDF : rendu tabulaire propre avec en-tête et colonnes
+v3 :
+  - Email du MEILLEUR CLIENT non-censuré (admin uniquement, pour envoi de cadeau).
+  - PDF redesign complet « esprit Tenora » : fond sombre, accent néon,
+    coins en crochets, eyebrows « // », monospace partout.
 """
 import csv
 import io
@@ -41,11 +42,11 @@ def _safe(text) -> str:
         str(text)
         .replace("\u2014", "-")   # em dash  —
         .replace("\u2013", "-")   # en dash  –
-        .replace("\u2019", "'")   # '
-        .replace("\u2018", "'")   # '
-        .replace("\u201c", '"')   # "
-        .replace("\u201d", '"')   # "
-        .replace("\u2026", "...") # …
+        .replace("\u2019", "'")
+        .replace("\u2018", "'")
+        .replace("\u201c", '"')
+        .replace("\u201d", '"')
+        .replace("\u2026", "...")
         .encode("latin-1", errors="replace")
         .decode("latin-1")
     )
@@ -84,10 +85,19 @@ def _delta_pct(curr: float, prev: float) -> float:
 
 
 def _mask_email(email: Optional[str]) -> str:
+    """Masque l'email pour les listes (table top 20). Le MEILLEUR client lui
+    n'est PAS masqué (cf. _full_email) afin de pouvoir lui envoyer un cadeau."""
     if not email or "@" not in email:
         return "—"
     user, domain = email.split("@", 1)
     return f"{user[0]}***@{domain}"
+
+
+def _full_email(email: Optional[str]) -> str:
+    """Email complet, non-censuré. Réservé aux KPIs admin (best client)."""
+    if not email or "@" not in email:
+        return "—"
+    return email
 
 
 def _orders_in_window(db: Session, start: datetime, end: datetime):
@@ -109,85 +119,82 @@ def stats_overview(
     admin: User = Depends(get_admin_user),
 ):
     start, end = _parse_period(period, date_from, date_to)
-    prev_start, prev_end = _previous_window(start, end)
+    p_start, p_end = _previous_window(start, end)
 
-    # ── Fetch unique par fenêtre (était 4 requêtes pour curr seul) ──
-    curr_rows = _orders_in_window(db, start, end).all()
-    prev_rows = _orders_in_window(db, prev_start, prev_end).all()
+    curr = _orders_in_window(db, start, end).all()
+    prev = _orders_in_window(db, p_start, p_end).all()
 
-    def _agg(rows: list) -> dict:
-        total_orders  = len(rows)
-        revenue_rows  = [r for r in rows if r.status in _REVENUE_STATUSES]
-        total_revenue = sum(r.total_price or 0 for r in revenue_rows)
-        completed     = sum(1 for r in rows if r.status == OrderStatus.completed)
-        avg_basket    = (total_revenue / len(revenue_rows)) if revenue_rows else 0
-        completion    = (completed / total_orders * 100) if total_orders else 0
+    def _sum_metrics(rows):
+        revenue = sum(r.total_price or 0 for r in rows if r.status in _REVENUE_STATUSES)
+        completed = sum(1 for r in rows if r.status == OrderStatus.completed)
         return {
-            "orders":          total_orders,
-            "revenue":         round(total_revenue),
-            "avg_basket":      round(avg_basket),
-            "completion_rate": round(completion, 1),
+            "revenue":  round(revenue),
+            "orders":   len(rows),
+            "completed": completed,
+            "avg_basket": round(revenue / max(1, completed)) if completed else 0,
+            "completion_rate": round(completed / len(rows) * 100, 1) if rows else 0,
         }
 
-    curr = _agg(curr_rows)
-    prev = _agg(prev_rows)
+    c = _sum_metrics(curr)
+    p = _sum_metrics(prev)
 
-    # Chart quotidien — calculé depuis curr_rows déjà chargés
-    daily: dict = defaultdict(lambda: {"revenue": 0, "orders": 0})
-    status_counts: dict = defaultdict(int)
-    for o in curr_rows:
-        key = _to_date_key(o.created_at)
-        daily[key]["orders"] += 1
-        if o.status in _REVENUE_STATUSES:
-            daily[key]["revenue"] += int(o.total_price or 0)
-        status_counts[o.status.value] += 1
-
-    chart = [{"date": d, **v} for d, v in sorted(daily.items())]
-
-    total = sum(status_counts.values()) or 1
-    status_distribution = [
-        {"status": s, "count": c, "pct": round(c / total * 100, 1)}
-        for s, c in status_counts.items()
+    by_date: dict = defaultdict(lambda: {"revenue": 0, "orders": 0})
+    for r in curr:
+        k = _to_date_key(r.created_at)
+        by_date[k]["orders"] += 1
+        if r.status in _REVENUE_STATUSES:
+            by_date[k]["revenue"] += r.total_price or 0
+    chart = [
+        {"date": d, "revenue": round(v["revenue"]), "orders": v["orders"]}
+        for d, v in sorted(by_date.items())
     ]
 
-    weekly: dict = defaultdict(lambda: {"orders": 0, "revenue": 0, "completed": 0})
-    for o in curr_rows:
-        iso = o.created_at.isocalendar()
-        key = f"{iso[0]}-S{iso[1]:02d}"
-        weekly[key]["orders"] += 1
-        if o.status == OrderStatus.completed:
-            weekly[key]["completed"] += 1
-        if o.status in _REVENUE_STATUSES:
-            weekly[key]["revenue"] += int(o.total_price or 0)
+    status_counts: dict = defaultdict(int)
+    for r in curr:
+        status_counts[r.status.value if hasattr(r.status, "value") else str(r.status)] += 1
+    total_curr = max(1, len(curr))
+    status_distribution = [
+        {"status": s, "count": n, "pct": round(n / total_curr * 100, 1)}
+        for s, n in status_counts.items()
+    ]
+
+    by_week: dict = defaultdict(lambda: {"orders": 0, "revenue": 0, "completed": 0})
+    for r in curr:
+        wk = r.created_at.strftime("%Y-W%V")
+        by_week[wk]["orders"] += 1
+        if r.status == OrderStatus.completed:
+            by_week[wk]["completed"] += 1
+        if r.status in _REVENUE_STATUSES:
+            by_week[wk]["revenue"] += r.total_price or 0
     weekly_summary = [
         {
             "week":            w,
             "orders":          v["orders"],
-            "revenue":         v["revenue"],
-            "avg_basket":      round(v["revenue"] / v["orders"]) if v["orders"] else 0,
-            "completion_rate": round(v["completed"] / v["orders"] * 100, 1) if v["orders"] else 0,
+            "revenue":         round(v["revenue"]),
+            "avg_basket":      round(v["revenue"] / max(1, v["completed"])) if v["completed"] else 0,
+            "completion_rate": round(v["completed"] / max(1, v["orders"]) * 100, 1),
         }
-        for w, v in sorted(weekly.items())
+        for w, v in sorted(by_week.items())
     ]
 
     return {
         "kpis": {
-            "revenue":                   curr["revenue"],
-            "revenue_prev":              prev["revenue"],
-            "revenue_delta_pct":         _delta_pct(curr["revenue"], prev["revenue"]),
-            "orders":                    curr["orders"],
-            "orders_prev":               prev["orders"],
-            "orders_delta_pct":          _delta_pct(curr["orders"], prev["orders"]),
-            "avg_basket":                curr["avg_basket"],
-            "avg_basket_prev":           prev["avg_basket"],
-            "avg_basket_delta_pct":      _delta_pct(curr["avg_basket"], prev["avg_basket"]),
-            "completion_rate":           curr["completion_rate"],
-            "completion_rate_prev":      prev["completion_rate"],
-            "completion_rate_delta_pct": round(curr["completion_rate"] - prev["completion_rate"], 1),
+            "revenue":                    c["revenue"],
+            "revenue_prev":               p["revenue"],
+            "revenue_delta_pct":          _delta_pct(c["revenue"], p["revenue"]),
+            "orders":                     c["orders"],
+            "orders_prev":                p["orders"],
+            "orders_delta_pct":           _delta_pct(c["orders"], p["orders"]),
+            "avg_basket":                 c["avg_basket"],
+            "avg_basket_prev":            p["avg_basket"],
+            "avg_basket_delta_pct":       _delta_pct(c["avg_basket"], p["avg_basket"]),
+            "completion_rate":            c["completion_rate"],
+            "completion_rate_prev":       p["completion_rate"],
+            "completion_rate_delta_pct":  _delta_pct(c["completion_rate"], p["completion_rate"]),
         },
-        "chart":               chart,
+        "chart": chart,
         "status_distribution": status_distribution,
-        "weekly_summary":      weekly_summary,
+        "weekly_summary": weekly_summary,
     }
 
 
@@ -202,51 +209,61 @@ def stats_orders(
     admin: User = Depends(get_admin_user),
 ):
     start, end = _parse_period(period, date_from, date_to)
-    today_start = datetime.utcnow().replace(hour=0, minute=0, second=0, microsecond=0)
-
     rows = _orders_in_window(db, start, end).all()
+
+    today = datetime.utcnow().date()
+    today_count = sum(1 for r in rows if r.created_at.date() == today)
     total = len(rows)
-    today = db.query(Order).filter(Order.created_at >= today_start).count()
     rejected = sum(1 for r in rows if r.status == OrderStatus.rejected)
     rejection_rate = round(rejected / total * 100, 1) if total else 0
 
-    completed_rows = [r for r in rows if r.status == OrderStatus.completed and r.updated_at and r.created_at]
-    avg_processing = (
-        round(sum((r.updated_at - r.created_at).total_seconds() / 3600 for r in completed_rows) / len(completed_rows), 2)
-        if completed_rows else None
-    )
+    processed = [r for r in rows if r.status in (OrderStatus.completed, OrderStatus.refunded)
+                 and getattr(r, "processed_at", None)]
+    avg_h = None
+    if processed:
+        diffs = [
+            (r.processed_at - r.created_at).total_seconds() / 3600
+            for r in processed
+        ]
+        avg_h = round(sum(diffs) / len(diffs), 1)
 
-    daily: dict = defaultdict(lambda: {"completed": 0, "pending": 0, "rejected": 0, "processing": 0, "refunded": 0})
-    hourly = {h: 0 for h in range(24)}
-    weekday = {i: 0 for i in range(7)}
-    processing = completed = 0
+    by_day: dict = defaultdict(lambda: defaultdict(int))
+    by_hour: dict = defaultdict(int)
+    for r in rows:
+        k = _to_date_key(r.created_at)
+        st = r.status.value if hasattr(r.status, "value") else str(r.status)
+        by_day[k][st] += 1
+        by_hour[r.created_at.hour] += 1
 
-    for o in rows:
-        daily[_to_date_key(o.created_at)][o.status.value] += 1
-        hourly[o.created_at.hour] += 1
-        weekday[o.created_at.weekday()] += 1
-        if o.status == OrderStatus.processing: processing += 1
-        if o.status == OrderStatus.completed:  completed  += 1
+    daily_breakdown = []
+    for d in sorted(by_day.keys()):
+        row = {"date": d}
+        for s in ("completed", "pending", "rejected", "processing", "refunded"):
+            row[s] = by_day[d].get(s, 0)
+        daily_breakdown.append(row)
 
-    weekday_labels = ["Lun", "Mar", "Mer", "Jeu", "Ven", "Sam", "Dim"]
+    hourly_distribution = [{"hour": h, "count": by_hour.get(h, 0)} for h in range(24)]
+
+    processing = sum(1 for r in rows if r.status == OrderStatus.processing)
+    completed  = sum(1 for r in rows if r.status == OrderStatus.completed)
+    funnel = {
+        "total":           total,
+        "processing":      processing,
+        "processing_pct":  round(processing / max(1, total) * 100, 1),
+        "completed":       completed,
+        "completion_pct":  round(completed / max(1, total) * 100, 1),
+    }
 
     return {
         "kpis": {
             "total":                total,
-            "today":                today,
+            "today":                today_count,
             "rejection_rate":       rejection_rate,
-            "avg_processing_hours": avg_processing,
+            "avg_processing_hours": avg_h,
         },
-        "daily_breakdown":      [{"date": d, **v} for d, v in sorted(daily.items())],
-        "hourly_distribution":  [{"hour": h, "count": c} for h, c in hourly.items()],
-        "weekday_distribution": [{"weekday": w, "label": weekday_labels[w], "count": c} for w, c in weekday.items()],
-        "funnel": {
-            "total":          total,
-            "processing":     processing,
-            "completed":      completed,
-            "processing_pct": round(processing / total * 100, 1) if total else 0,
-            "completion_pct": round(completed  / total * 100, 1) if total else 0,
-        },
+        "daily_breakdown":     daily_breakdown,
+        "hourly_distribution": hourly_distribution,
+        "funnel":              funnel,
     }
 
 
@@ -262,59 +279,74 @@ def stats_revenue(
 ):
     start, end = _parse_period(period, date_from, date_to)
     rows = _orders_in_window(db, start, end).all()
-    rev_rows = [r for r in rows if r.status in _REVENUE_STATUSES]
 
-    total_revenue   = sum(r.total_price or 0 for r in rev_rows)
-    total_discounts = sum(r.discount_amount or 0 for r in rev_rows)
-    days = max(1, (end - start).days)
-    daily_avg = round(total_revenue / days)
+    paying = [r for r in rows if r.status in _REVENUE_STATUSES]
+    total_revenue = round(sum(r.total_price or 0 for r in paying))
+    n_days = max(1, (end - start).days)
+    daily_avg = round(total_revenue / n_days)
 
     by_day: dict = defaultdict(float)
-    by_method: dict = defaultdict(lambda: {"revenue": 0, "orders": 0})
-    by_cat: dict = defaultdict(lambda: {"revenue": 0, "orders": 0})
-    scatter = []
-
-    for r in rev_rows:
+    for r in paying:
         by_day[_to_date_key(r.created_at)] += r.total_price or 0
-        m = r.payment_method or "—"
-        by_method[m]["revenue"] += r.total_price or 0
-        by_method[m]["orders"]  += 1
-        cat = r.product.category.name if r.product and r.product.category else "—"
-        by_cat[cat]["revenue"] += r.total_price or 0
-        by_cat[cat]["orders"]  += 1
-        scatter.append({"hour": r.created_at.hour, "amount": round(r.total_price or 0), "status": r.status.value})
 
-    cumulative = []
-    running = 0.0
     best_day = {"date": None, "revenue": 0}
-    for d, v in sorted(by_day.items()):
-        running += v
-        cumulative.append({"date": d, "revenue": round(v), "cumulative": round(running)})
+    cumulative = []
+    cum_total = 0.0
+    for d in sorted(by_day.keys()):
+        v = by_day[d]
+        cum_total += v
+        cumulative.append({"date": d, "revenue": round(v), "cumulative": round(cum_total)})
         if v > best_day["revenue"]:
             best_day = {"date": d, "revenue": round(v)}
 
-    by_category = sorted([
+    by_method: dict = defaultdict(lambda: {"revenue": 0, "orders": 0})
+    for r in paying:
+        m = getattr(r, "payment_method", None) or "—"
+        by_method[m]["revenue"] += r.total_price or 0
+        by_method[m]["orders"]  += 1
+    by_payment_method = [
+        {"method": m, "revenue": round(v["revenue"]), "orders": v["orders"]}
+        for m, v in by_method.items()
+    ]
+
+    by_cat: dict = defaultdict(lambda: {"revenue": 0, "orders": 0})
+    for r in paying:
+        for it in getattr(r, "items", []) or []:
+            cat = getattr(getattr(it, "product", None), "category", None) or "—"
+            cat_name = getattr(cat, "name", str(cat))
+            by_cat[cat_name]["revenue"] += (getattr(it, "price", 0) or 0) * (getattr(it, "quantity", 0) or 0)
+            by_cat[cat_name]["orders"]  += 1
+    total_cat = sum(v["revenue"] for v in by_cat.values()) or 1
+    by_category = [
         {
-            "category":   cat,
+            "category":   c,
             "revenue":    round(v["revenue"]),
             "orders":     v["orders"],
-            "avg_basket": round(v["revenue"] / v["orders"]) if v["orders"] else 0,
-            "share_pct":  round(v["revenue"] / total_revenue * 100, 1) if total_revenue else 0,
+            "avg_basket": round(v["revenue"] / max(1, v["orders"])),
+            "share_pct":  round(v["revenue"] / total_cat * 100, 1),
         }
-        for cat, v in by_cat.items()
-    ], key=lambda x: x["revenue"], reverse=True)
+        for c, v in sorted(by_cat.items(), key=lambda x: x[1]["revenue"], reverse=True)
+    ]
+
+    total_discounts = round(sum(getattr(r, "discount_amount", 0) or 0 for r in paying))
+
+    scatter = [
+        {"hour": r.created_at.hour, "amount": round(r.total_price or 0),
+         "status": r.status.value if hasattr(r.status, "value") else str(r.status)}
+        for r in paying
+    ]
 
     return {
         "kpis": {
-            "total_revenue":   round(total_revenue),
-            "daily_avg":       daily_avg,
-            "best_day":        best_day,
-            "total_discounts": round(total_discounts),
+            "total_revenue":     total_revenue,
+            "daily_avg":         daily_avg,
+            "best_day":          best_day,
+            "total_discounts":   total_discounts,
         },
-        "cumulative":        cumulative,
-        "by_payment_method": [{"method": m, "revenue": round(v["revenue"]), "orders": v["orders"]} for m, v in by_method.items()],
-        "by_category":       by_category,
-        "scatter":           scatter,
+        "cumulative":          cumulative,
+        "by_payment_method":   by_payment_method,
+        "by_category":         by_category,
+        "scatter":             scatter,
     }
 
 
@@ -330,67 +362,75 @@ def stats_products(
 ):
     start, end = _parse_period(period, date_from, date_to)
     rows = _orders_in_window(db, start, end).all()
-    rev_rows = [r for r in rows if r.status in _REVENUE_STATUSES]
+    paying = [r for r in rows if r.status in _REVENUE_STATUSES]
 
-    agg: dict = defaultdict(lambda: {"sales": 0, "revenue": 0})
-    for r in rev_rows:
-        if not r.product:
-            continue
-        agg[r.product.id]["sales"]   += r.quantity or 1
-        agg[r.product.id]["revenue"] += r.total_price or 0
+    by_prod: dict = defaultdict(lambda: {"sales": 0, "revenue": 0, "name": "", "category": "—"})
+    for r in paying:
+        for it in getattr(r, "items", []) or []:
+            p = getattr(it, "product", None)
+            pid = getattr(p, "id", None)
+            if pid is None:
+                continue
+            d = by_prod[pid]
+            d["sales"]   += (getattr(it, "quantity", 0) or 0)
+            d["revenue"] += (getattr(it, "price", 0) or 0) * (getattr(it, "quantity", 0) or 0)
+            d["name"]     = getattr(p, "name", "—")
+            cat = getattr(p, "category", None)
+            d["category"] = getattr(cat, "name", "—") if cat else "—"
 
-    products = db.query(Product).all()
-    by_id = {p.id: p for p in products}
-    total_products  = len(products)
-    active_products = sum(1 for p in products if p.is_active)
+    all_products = db.query(Product).all()
+    active = sum(1 for p in all_products if getattr(p, "is_active", True))
+    active_rate_pct = round(active / max(1, len(all_products)) * 100, 1)
 
-    enriched = sorted([
+    zero_sales = [p for p in all_products if p.id not in by_prod]
+
+    top_seller   = max(by_prod.values(), key=lambda v: v["sales"], default=None)
+    top_revenue  = max(by_prod.values(), key=lambda v: v["revenue"], default=None)
+
+    top_products = [
         {
-            "product_id":  pid,
-            "name":        p.name,
-            "category":    p.category.name if p.category else "—",
+            "name":        v["name"],
+            "category":    v["category"],
             "sales_count": v["sales"],
             "revenue":     round(v["revenue"]),
-            "avg_basket":  round(v["revenue"] / v["sales"]) if v["sales"] else 0,
-            "stock":       p.stock,
-            "is_active":   bool(p.is_active),
         }
-        for pid, v in agg.items()
-        if (p := by_id.get(pid))
-    ], key=lambda x: x["revenue"], reverse=True)
+        for v in sorted(by_prod.values(), key=lambda x: x["revenue"], reverse=True)[:10]
+    ]
 
-    top_seller  = max(enriched, key=lambda x: x["sales_count"], default=None)
-    top_revenue = enriched[0] if enriched else None
+    cat_map: dict = defaultdict(float)
+    for v in by_prod.values():
+        cat_map[v["category"]] += v["revenue"]
+    treemap = [
+        {"name": c, "value": round(rev), "children": [{"name": c, "value": round(rev)}]}
+        for c, rev in cat_map.items()
+    ]
 
-    # Agrégation par catégorie (treemap plat : une entrée par catégorie)
-    cat_agg: dict = defaultdict(lambda: {"revenue": 0, "sales": 0})
-    for e in enriched:
-        cat_agg[e["category"]]["revenue"] += e["revenue"]
-        cat_agg[e["category"]]["sales"]   += e["sales_count"]
-
-    table = [{
-        "product_id": e["product_id"], "name": e["name"], "category": e["category"],
-        "sales": e["sales_count"], "revenue": e["revenue"], "avg_basket": e["avg_basket"],
-        "stock": e["stock"], "is_active": e["is_active"],
-    } for e in enriched]
+    table = []
+    for p in all_products:
+        d = by_prod.get(p.id, {"sales": 0, "revenue": 0})
+        table.append({
+            "id":         p.id,
+            "name":       p.name,
+            "category":   getattr(getattr(p, "category", None), "name", "—"),
+            "sales":      d["sales"],
+            "revenue":    round(d["revenue"]),
+            "avg_basket": round(d["revenue"] / max(1, d["sales"])) if d["sales"] else 0,
+            "stock":      getattr(p, "stock", None),
+            "is_active":  getattr(p, "is_active", True),
+        })
 
     return {
         "kpis": {
-            "top_seller_name":    top_seller["name"]        if top_seller  else "—",
-            "top_seller_qty":     top_seller["sales_count"] if top_seller  else 0,
-            "top_revenue_name":   top_revenue["name"]       if top_revenue else "—",
-            "top_revenue_amount": top_revenue["revenue"]    if top_revenue else 0,
-            "active_rate_pct":    round(active_products / total_products * 100, 1) if total_products else 0,
-            "zero_sales_count":   total_products - len(enriched),
+            "top_seller_name":     top_seller["name"]   if top_seller   else None,
+            "top_seller_qty":      top_seller["sales"]  if top_seller   else 0,
+            "top_revenue_name":    top_revenue["name"]  if top_revenue  else None,
+            "top_revenue_amount":  round(top_revenue["revenue"]) if top_revenue else 0,
+            "active_rate_pct":     active_rate_pct,
+            "zero_sales_count":    len(zero_sales),
         },
-        "top_products": enriched[:10],
-        # Treemap plat — une entrée par catégorie, value = CA total de la catégorie
-        "treemap": [
-            {"name": cat, "value": round(v["revenue"]), "sales": v["sales"]}
-            for cat, v in sorted(cat_agg.items(), key=lambda x: x[1]["revenue"], reverse=True)
-        ],
-        "table":  table,
-        "total":  len(table),
+        "top_products": top_products,
+        "treemap":      treemap,
+        "table":        table,
     }
 
 
@@ -426,12 +466,21 @@ def stats_customers(
     user_ids = list(by_user.keys())
     users_map = {u.id: u for u in db.query(User).filter(User.id.in_(user_ids)).all()} if user_ids else {}
 
+    # Liste triée par CA décroissant
+    sorted_users = sorted(by_user.items(), key=lambda x: x[1]["revenue"], reverse=True)
+
     top_customers = []
-    for uid, v in sorted(by_user.items(), key=lambda x: x[1]["revenue"], reverse=True)[:20]:
+    for idx, (uid, v) in enumerate(sorted_users[:20]):
         u = users_map.get(uid)
         status = "vip" if v["orders"] >= 5 else ("récurrent" if v["orders"] >= 2 else "nouveau")
+        email_raw = u.email if u else None
+        # ─── MEILLEUR CLIENT : email EN CLAIR (pour envoi de cadeau). Les autres
+        # restent masqués dans la liste publique.
+        is_top = (idx == 0)
         top_customers.append({
-            "email_masked":  _mask_email(u.email if u else None),
+            "email":         _full_email(email_raw) if is_top else _mask_email(email_raw),
+            "email_masked":  _mask_email(email_raw),  # rétro-compat front
+            "is_top":        is_top,
             "orders_count":  v["orders"],
             "total_revenue": round(v["revenue"]),
             "last_order_at": v["last"].isoformat() if v["last"] else None,
@@ -452,6 +501,9 @@ def stats_customers(
             "new_customers":             len(new_users_q),
             "returning_customers":       returning,
             "retention_rate_pct":        retention,
+            # Nouveau : email complet (NON CENSURÉ) pour le meilleur client
+            "top_customer_email":        top["email"]  if top else "—",
+            # Rétro-compatibilité : on garde la clé masquée si jamais utilisée ailleurs
             "top_customer_email_masked": top["email_masked"]  if top else "—",
             "top_customer_revenue":      top["total_revenue"] if top else 0,
         },
@@ -478,64 +530,73 @@ def stats_coupons(
 ):
     start, end = _parse_period(period, date_from, date_to)
     coupons = db.query(Coupon).all()
+    rows = _orders_in_window(db, start, end).all()
 
-    rev_rows = _orders_in_window(db, start, end).filter(Order.coupon_id.isnot(None)).all()
-    by_coupon_agg: dict = defaultdict(lambda: {"uses": 0, "remise_total": 0})
-    daily: dict = defaultdict(float)
+    active_count = sum(1 for c in coupons if getattr(c, "is_active", True))
 
-    for r in rev_rows:
-        if not r.coupon_id:
+    by_code: dict = defaultdict(lambda: {"uses": 0, "remise_total": 0})
+    by_day:  dict = defaultdict(float)
+    total_discounts_granted = 0
+    total_uses = 0
+
+    for r in rows:
+        code = getattr(r, "coupon_code", None)
+        disc = getattr(r, "discount_amount", 0) or 0
+        if not code:
             continue
-        by_coupon_agg[r.coupon_id]["uses"]          += 1
-        by_coupon_agg[r.coupon_id]["remise_total"]  += r.discount_amount or 0
-        daily[_to_date_key(r.created_at)] += r.discount_amount or 0
+        by_code[code]["uses"]         += 1
+        by_code[code]["remise_total"] += disc
+        by_day[_to_date_key(r.created_at)] += disc
+        total_discounts_granted += disc
+        total_uses += 1
 
-    total_uses      = sum(a["uses"]         for a in by_coupon_agg.values())
-    total_discounts = sum(a["remise_total"] for a in by_coupon_agg.values())
+    top_code = max(by_code.items(), key=lambda x: x[1]["uses"], default=(None, {"uses": 0}))
 
-    by_coupon = []
+    by_coupon_list = []
     for c in coupons:
-        agg = by_coupon_agg.get(c.id, {"uses": 0, "remise_total": 0})
-        t, v = ("percent", c.discount_percent) if c.discount_percent else ("amount", c.discount_amount or 0)
-        by_coupon.append({
-            "code":         c.code,
-            "type":         t,
-            "value":        v,
-            "uses":         agg["uses"],
-            "max_uses":     c.max_uses,
-            "remise_total": round(agg["remise_total"]),
-            "expires_at":   c.expires_at.isoformat() if c.expires_at else None,
-            "is_active":    bool(c.is_active),
+        st = by_code.get(c.code, {"uses": 0, "remise_total": 0})
+        by_coupon_list.append({
+            "code":          c.code,
+            "type":          getattr(c, "type", "amount"),
+            "value":         getattr(c, "value", 0),
+            "uses":          st["uses"],
+            "max_uses":      getattr(c, "max_uses", None),
+            "remise_total":  round(st["remise_total"]),
+            "is_active":     getattr(c, "is_active", True),
+            "expires_at":    c.expires_at.isoformat() if getattr(c, "expires_at", None) else None,
         })
 
-    top = max(by_coupon, key=lambda x: x["uses"], default=None)
+    daily_discounts = [
+        {"date": d, "discount_amount": round(v)}
+        for d, v in sorted(by_day.items())
+    ]
+
     return {
         "kpis": {
-            "active_count":            sum(1 for c in coupons if c.is_active),
-            "total_uses":              total_uses,
-            "total_discounts_granted": round(total_discounts),
-            "top_coupon_code":         top["code"] if top else "—",
-            "top_coupon_uses":         top["uses"] if top else 0,
+            "active_count":             active_count,
+            "total_uses":               total_uses,
+            "total_discounts_granted":  round(total_discounts_granted),
+            "top_coupon_code":          top_code[0] or "—",
+            "top_coupon_uses":          top_code[1]["uses"],
         },
-        "daily_discounts": [{"date": d, "discount_amount": round(v)} for d, v in sorted(daily.items())],
-        "by_coupon":       by_coupon,
+        "by_coupon":       by_coupon_list,
+        "daily_discounts": daily_discounts,
     }
 
 
 # ─── EXPORT CSV ───────────────────────────────────────────────────────────────
 
-def _csv_stream(rows: list, headers: list[str]) -> StreamingResponse:
+def _csv_stream(rows, headers):
     buf = io.StringIO()
-    buf.write("\ufeff")  # BOM Excel
-    writer = csv.writer(buf)
-    writer.writerow(headers)
+    w = csv.writer(buf, delimiter=";")
+    w.writerow(headers)
     for r in rows:
-        writer.writerow(r)
+        w.writerow(r)
     buf.seek(0)
     return StreamingResponse(iter([buf.getvalue()]), media_type="text/csv")
 
 
-@stats_router.get("/export/{section}")
+@stats_router.get("/export/{section}/csv")
 def export_csv(
     section:   str,
     period:    str = Query("30j"),
@@ -547,7 +608,6 @@ def export_csv(
     if section not in _VALID_SECTIONS:
         raise HTTPException(status_code=400, detail="Section invalide.")
 
-    start, end = _parse_period(period, date_from, date_to)
     stamp = datetime.utcnow().strftime("%Y%m%d")
     filename = f"tenora_{section}_{stamp}.csv"
 
@@ -575,7 +635,8 @@ def export_csv(
         rows = [[r["name"], r["category"], r["sales"], r["revenue"], r["avg_basket"], r["stock"]] for r in data["table"]]
     elif section == "customers":
         headers = ["Email", "Commandes", "Chiffre d'affaires total (F)", "Dernière commande", "Statut"]
-        rows = [[r["email_masked"], r["orders_count"], r["total_revenue"], r["last_order_at"], r["status"]] for r in data["top_customers"]]
+        # CSV admin : on exporte l'email tel que servi (1er = complet, autres masqués)
+        rows = [[r.get("email") or r.get("email_masked"), r["orders_count"], r["total_revenue"], r["last_order_at"], r["status"]] for r in data["top_customers"]]
     elif section == "coupons":
         headers = ["Code", "Type", "Valeur", "Utilisations", "Remise accordée (F)", "Actif"]
         rows = [[r["code"], r["type"], r["value"], r["uses"], r["remise_total"], r["is_active"]] for r in data["by_coupon"]]
@@ -587,218 +648,300 @@ def export_csv(
     return resp
 
 
-# ─── EXPORT PDF ───────────────────────────────────────────────────────────────
+# ─── EXPORT PDF — esprit TENORA ───────────────────────────────────────────────
+
+# Palette Tenora (RGB)
+_T_BG        = (10, 10, 10)       # fond pages sombres
+_T_INK       = (245, 245, 245)    # texte sur sombre
+_T_INK_DIM   = (170, 170, 170)
+_T_NEON      = (212, 255, 61)     # accent lime
+_T_NEON_INK  = (10, 10, 10)       # texte sur néon
+_T_LINE      = (55, 55, 55)
+_T_CARD      = (20, 20, 20)
+_T_CARD_ALT  = (28, 28, 28)
+_T_SUCCESS   = (74, 222, 128)
+
+
+def _brackets(pdf, x, y, w, h, color=_T_NEON, size=3.0, thick=0.6):
+    """Dessine 4 coins en crochets façon Tenora autour d'une zone."""
+    pdf.set_draw_color(*color)
+    pdf.set_line_width(thick)
+    # haut-gauche
+    pdf.line(x, y, x + size, y)
+    pdf.line(x, y, x, y + size)
+    # haut-droit
+    pdf.line(x + w, y, x + w - size, y)
+    pdf.line(x + w, y, x + w, y + size)
+    # bas-gauche
+    pdf.line(x, y + h, x + size, y + h)
+    pdf.line(x, y + h, x, y + h - size)
+    # bas-droit
+    pdf.line(x + w, y + h, x + w - size, y + h)
+    pdf.line(x + w, y + h, x + w, y + h - size)
+
 
 def _make_pdf(section: str, start: datetime, end: datetime, data: dict) -> bytes:
-    """Génère un PDF propre avec en-tête, KPIs et tableau de données."""
+    """Génère un PDF dans l'esprit Tenora : sombre, accent néon, monospace."""
 
     SECTION_LABELS = {
         "overview": "Vue Globale", "orders": "Commandes", "revenue": "Revenus",
         "products": "Produits", "customers": "Clients", "coupons": "Coupons",
     }
+    section_label = SECTION_LABELS.get(section, section.upper())
 
     class TenoraReport(FPDF):
         def header(self):
-            # Barre de titre noire
-            self.set_fill_color(15, 15, 15)
-            self.rect(0, 0, 210, 18, "F")
-            self.set_font("Courier", "B", 13)
-            self.set_text_color(255, 255, 255)
-            self.set_y(4)
-            self.cell(0, 8, "TENORA  //  Panel Administrateur", ln=1)
+            # Bandeau noir Tenora
+            self.set_fill_color(*_T_BG)
+            self.rect(0, 0, 210, 22, "F")
 
-            # Sous-titre section
-            self.set_fill_color(245, 245, 245)
-            self.rect(0, 18, 210, 14, "F")
-            self.set_font("Courier", "B", 9)
-            self.set_text_color(20, 20, 20)
-            self.set_y(20)
-            sec_lbl = SECTION_LABELS.get(section, section.upper())
-            self.cell(130, 5, f"  Rapport : {sec_lbl.upper()}", ln=0)
-            self.set_font("Courier", "", 8)
-            self.set_text_color(100, 100, 100)
-            periode = f"Periode : {start.strftime('%d/%m/%Y')} -> {end.strftime('%d/%m/%Y')}"
-            self.cell(0, 5, periode, ln=1, align="R")
+            # Bande néon sous le bandeau
+            self.set_fill_color(*_T_NEON)
+            self.rect(0, 22, 210, 1.2, "F")
+
+            # Logo carré néon « ⚡ » → on simule par un carré + T
+            self.set_fill_color(*_T_NEON)
+            self.rect(10, 5, 12, 12, "F")
+            self.set_font("Courier", "B", 11)
+            self.set_text_color(*_T_NEON_INK)
+            self.set_xy(10, 5)
+            self.cell(12, 12, "T", align="C")
+
+            # Titre TENORA
+            self.set_font("Courier", "B", 14)
+            self.set_text_color(*_T_INK)
+            self.set_xy(26, 6.5)
+            self.cell(0, 5, "TENORA", ln=1)
             self.set_font("Courier", "", 7)
-            self.set_text_color(130, 130, 130)
-            self.set_x(10)
-            self.cell(0, 5, f"  Genere le {datetime.utcnow().strftime('%d/%m/%Y a %H:%M')} UTC", ln=1)
+            self.set_text_color(*_T_INK_DIM)
+            self.set_xy(26, 12)
+            self.cell(0, 4, "// ADMIN.PANEL  //  STATISTICS REPORT", ln=1)
 
-            # Ligne séparatrice
-            self.set_draw_color(0, 0, 0)
-            self.set_line_width(0.4)
-            self.line(10, 33, 200, 33)
-            self.set_y(37)
+            # Coin droit : statut système
+            self.set_font("Courier", "", 7)
+            self.set_text_color(*_T_SUCCESS)
+            self.set_xy(160, 7)
+            self.cell(40, 4, "* SYS // NOMINAL", align="R", ln=1)
+            self.set_text_color(*_T_INK_DIM)
+            self.set_xy(160, 12)
+            self.cell(40, 4, datetime.utcnow().strftime("%d/%m/%Y %H:%M UTC"), align="R", ln=1)
+
+            # Sous-bandeau section
+            self.set_fill_color(20, 20, 20)
+            self.rect(0, 23.2, 210, 14, "F")
+            # eyebrow
+            self.set_font("Courier", "", 7)
+            self.set_text_color(*_T_INK_DIM)
+            self.set_xy(10, 25)
+            self.cell(0, 4, "// SECTION", ln=1)
+            # titre section
+            self.set_font("Courier", "B", 13)
+            self.set_text_color(*_T_INK)
+            self.set_xy(10, 29)
+            self.cell(0, 6, _safe(section_label).upper(), ln=1)
+
+            # période (droite)
+            self.set_font("Courier", "", 7)
+            self.set_text_color(*_T_INK_DIM)
+            self.set_xy(120, 25)
+            self.cell(80, 4, "// PERIODE", align="R", ln=1)
+            self.set_font("Courier", "B", 9)
+            self.set_text_color(*_T_NEON)
+            self.set_xy(120, 30)
+            self.cell(80, 5, f"{start.strftime('%d/%m/%Y')}  ->  {end.strftime('%d/%m/%Y')}", align="R", ln=1)
+
+            self.set_y(43)
+            # Reset couleurs pour la suite
+            self.set_text_color(20, 20, 20)
+            self.set_draw_color(*_T_LINE)
 
         def footer(self):
-            self.set_y(-12)
+            # Barre fine néon
+            self.set_fill_color(*_T_NEON)
+            self.rect(0, 285, 210, 0.6, "F")
+            # Bandeau noir
+            self.set_fill_color(*_T_BG)
+            self.rect(0, 285.6, 210, 11.4, "F")
+            self.set_y(-9)
             self.set_font("Courier", "", 7)
-            self.set_text_color(150, 150, 150)
-            self.cell(0, 5, f"Tenora Panel  //  Page {self.page_no()}", align="C")
+            self.set_text_color(*_T_INK_DIM)
+            self.cell(0, 4, "// TENORA  //  ADMIN PANEL", align="L")
+            self.cell(0, 4, f"PAGE {self.page_no():02d}", align="R")
 
     pdf = TenoraReport()
-    pdf.set_margins(10, 15, 10)
+    pdf.set_margins(10, 45, 10)
+    pdf.set_auto_page_break(auto=True, margin=18)
     pdf.add_page()
 
-    # ── KPIs ──────────────────────────────────────────────────────────────────
+    # ── KPIs en grille de tuiles sombres avec coins en crochets ───────────────
     kpis = data.get("kpis", {})
     _kpi_labels = {
         # overview
-        "revenue":                   "Chiffre d'affaires (F)",
-        "orders":                    "Commandes",
-        "avg_basket":                "Panier moyen (F)",
-        "completion_rate":           "Taux de complétion (%)",
+        "revenue":                   "CHIFFRE D'AFFAIRES (F)",
+        "orders":                    "COMMANDES",
+        "avg_basket":                "PANIER MOYEN (F)",
+        "completion_rate":           "TAUX DE COMPLETION (%)",
         # orders
-        "total":                     "Total commandes",
-        "today":                     "Commandes aujourd'hui",
-        "rejection_rate":            "Taux de rejet (%)",
-        "avg_processing_hours":      "Traitement moyen (h)",
+        "total":                     "TOTAL COMMANDES",
+        "today":                     "COMMANDES AUJOURD'HUI",
+        "rejection_rate":            "TAUX DE REJET (%)",
+        "avg_processing_hours":      "TRAITEMENT MOYEN (H)",
         # revenue
-        "total_revenue":             "Chiffre d'affaires total (F)",
-        "daily_avg":                 "CA journalier moyen (F)",
-        "total_discounts":           "Total remises coupons (F)",
+        "total_revenue":             "CHIFFRE D'AFFAIRES TOTAL (F)",
+        "daily_avg":                 "CA JOURNALIER MOYEN (F)",
+        "total_discounts":           "TOTAL REMISES COUPONS (F)",
         # products
-        "top_seller_name":           "Meilleure vente (nom)",
-        "top_seller_qty":            "Meilleure vente (qté)",
-        "top_revenue_name":          "Meilleur revenu (nom)",
-        "top_revenue_amount":        "Meilleur revenu (F)",
-        "active_rate_pct":           "Taux produits actifs (%)",
-        "zero_sales_count":          "Produits sans vente",
+        "top_seller_name":           "MEILLEURE VENTE (NOM)",
+        "top_seller_qty":            "MEILLEURE VENTE (QTE)",
+        "top_revenue_name":          "MEILLEUR REVENU (NOM)",
+        "top_revenue_amount":        "MEILLEUR REVENU (F)",
+        "active_rate_pct":           "TAUX PRODUITS ACTIFS (%)",
+        "zero_sales_count":          "PRODUITS SANS VENTE",
         # customers
-        "new_customers":             "Nouveaux clients",
-        "returning_customers":       "Clients récurrents",
-        "retention_rate_pct":        "Taux de rétention (%)",
-        "top_customer_email_masked": "Meilleur client (email)",
-        "top_customer_revenue":      "Meilleur client (CA, F)",
+        "new_customers":             "NOUVEAUX CLIENTS",
+        "returning_customers":       "CLIENTS RECURRENTS",
+        "retention_rate_pct":        "TAUX DE RETENTION (%)",
+        "top_customer_email":        "MEILLEUR CLIENT (EMAIL)",
+        "top_customer_revenue":      "MEILLEUR CLIENT (CA, F)",
         # coupons
-        "active_count":              "Coupons actifs",
-        "total_uses":                "Utilisations totales",
-        "total_discounts_granted":   "Total remises accordées (F)",
-        "top_coupon_code":           "Coupon le plus utilisé",
-        "top_coupon_uses":           "Utilisations du top coupon",
+        "active_count":              "COUPONS ACTIFS",
+        "total_uses":                "UTILISATIONS TOTALES",
+        "total_discounts_granted":   "TOTAL REMISES ACCORDEES (F)",
+        "top_coupon_code":           "COUPON LE PLUS UTILISE",
+        "top_coupon_uses":           "UTILISATIONS DU TOP COUPON",
     }
 
-    if kpis:
-        pdf.set_font("Courier", "B", 10)
-        pdf.set_text_color(0, 0, 0)
-        pdf.cell(0, 6, "// INDICATEURS CLES", ln=1)
+    # Filtrer : on garde les KPIs « utiles » (pas les _prev/_delta/_masked/best_day)
+    SKIP_SUFFIX = ("_prev", "_delta_pct", "_masked")
+    pairs = [
+        (k, v) for k, v in kpis.items()
+        if not any(k.endswith(s) for s in SKIP_SUFFIX) and "best_day" not in k
+    ]
+
+    if pairs:
+        # eyebrow
+        pdf.set_font("Courier", "", 7)
+        pdf.set_text_color(*_T_INK_DIM)
+        pdf.cell(0, 4, "// INDICATEURS CLES", ln=1)
         pdf.ln(1)
 
-        pairs = [
-            (k, v) for k, v in kpis.items()
-            if not k.endswith("_prev") and not k.endswith("_delta_pct") and "best_day" not in k
-        ]
+        # Grille 2 colonnes
+        col_w   = 92
+        gap     = 6
+        tile_h  = 22
+        y0      = pdf.get_y()
 
-        # Largeurs : label 90, valeur 50, répété 2 fois → 2 colonnes de (label|valeur)
-        LBL_W, VAL_W, ROW_H = 90, 50, 6
-        USABLE = LBL_W + VAL_W  # = 140 par colonne × 2 = 280 mais on garde 1 col large
-
-        # Rendu en grille 2 colonnes (label | valeur) côte à côte
         for i in range(0, len(pairs), 2):
-            left  = pairs[i]
-            right = pairs[i + 1] if i + 1 < len(pairs) else None
+            row_pair = pairs[i:i+2]
+            y = pdf.get_y()
+            for col, (k, v) in enumerate(row_pair):
+                x = 10 + col * (col_w + gap)
+                # fond carte sombre
+                pdf.set_fill_color(*_T_CARD)
+                pdf.rect(x, y, col_w, tile_h, "F")
+                # coins néon
+                _brackets(pdf, x, y, col_w, tile_h, color=_T_NEON, size=3.0, thick=0.5)
+                # eyebrow label
+                pdf.set_font("Courier", "", 6)
+                pdf.set_text_color(*_T_INK_DIM)
+                pdf.set_xy(x + 4, y + 3)
+                lbl = _safe(_kpi_labels.get(k, k))
+                pdf.cell(col_w - 8, 3, f"// {lbl[:42]}", ln=1)
+                # valeur
+                val = _safe(v) if v is not None else "-"
+                pdf.set_font("Courier", "B", 13)
+                pdf.set_text_color(*_T_INK)
+                pdf.set_xy(x + 4, y + 9)
+                pdf.cell(col_w - 8, 10, val[:34], ln=1)
+            pdf.set_y(y + tile_h + 3)
 
-            # Colonne gauche
-            lbl_l = _safe(_kpi_labels.get(left[0], left[0]))
-            val_l = _safe(left[1]) if left[1] is not None else "-"
-            pdf.set_font("Courier", "", 7)
-            pdf.set_fill_color(245, 245, 245)
-            pdf.set_text_color(40, 40, 40)
-            pdf.cell(LBL_W, ROW_H, f"  {lbl_l[:40]}", border=1, fill=True)
-            pdf.set_font("Courier", "B", 7)
-            pdf.set_fill_color(255, 255, 255)
-            pdf.cell(VAL_W, ROW_H, f"  {val_l[:22]}", border=1, fill=True)
-
-            # Espacement inter-colonnes
-            pdf.cell(4, ROW_H, "", border=0)
-
-            # Colonne droite (ou vide si impair)
-            if right:
-                lbl_r = _safe(_kpi_labels.get(right[0], right[0]))
-                val_r = _safe(right[1]) if right[1] is not None else "-"
-                pdf.set_font("Courier", "", 7)
-                pdf.set_fill_color(245, 245, 245)
-                pdf.set_text_color(40, 40, 40)
-                pdf.cell(LBL_W, ROW_H, f"  {lbl_r[:40]}", border=1, fill=True)
-                pdf.set_font("Courier", "B", 7)
-                pdf.set_fill_color(255, 255, 255)
-                pdf.cell(VAL_W, ROW_H, f"  {val_r[:22]}", border=1, fill=True)
-
-            pdf.ln()
-
-        pdf.ln(5)
+        pdf.ln(2)
 
     # ── Tableau de données ─────────────────────────────────────────────────────
-    # Largeurs de colonnes par section (en mm, total doit être ≤ 190)
     _table_cfg = {
         "overview":  (
             "chart",
-            ["Date",       "Commandes", "CA (F)"],
+            ["DATE",       "COMMANDES", "CA (F)"],
             ["date",       "orders",    "revenue"],
-            [30, 35, 50],
+            [40, 50, 60],
         ),
         "orders": (
             "daily_breakdown",
-            ["Date",  "Complet.", "Attente", "Rejet", "Traitement", "Remb."],
+            ["DATE",  "COMPLET.", "ATTENTE", "REJET", "TRAITEM.", "REMB."],
             ["date",  "completed","pending", "rejected","processing","refunded"],
-            [30, 28, 28, 28, 32, 28],
+            [32, 28, 28, 28, 30, 24],
         ),
         "revenue": (
             "cumulative",
-            ["Date",  "CA (F)",  "CA cumulé (F)"],
+            ["DATE",  "CA (F)",  "CA CUMULE (F)"],
             ["date",  "revenue", "cumulative"],
-            [35, 55, 60],
+            [40, 55, 55],
         ),
         "products": (
             "table",
-            ["Produit",    "Catégorie",  "Ventes", "CA (F)", "Panier moy.", "Stock"],
+            ["PRODUIT",    "CATEGORIE",  "VENTES", "CA (F)", "PANIER", "STOCK"],
             ["name",       "category",   "sales",  "revenue","avg_basket",  "stock"],
             [58, 35, 18, 32, 28, 19],
         ),
         "customers": (
             "top_customers",
-            ["Email",        "Cmdes", "CA total (F)", "Dernière cmd", "Statut"],
-            ["email_masked", "orders_count","total_revenue","last_order_at","status"],
-            [58, 18, 38, 38, 28],
+            ["EMAIL",   "CMDES",       "CA (F)",        "DERNIERE",      "STATUT"],
+            ["__email", "orders_count","total_revenue", "last_order_at", "status"],
+            [70, 18, 36, 30, 26],
         ),
         "coupons": (
             "by_coupon",
-            ["Code",  "Type",  "Valeur", "Utilis.", "Remise (F)", "Max",  "Actif"],
-            ["code",  "type",  "value",  "uses",    "remise_total","max_uses","is_active"],
-            [35, 22, 22, 20, 35, 20, 18],
+            ["CODE",  "TYPE",  "VALEUR", "UTIL.", "REMISE (F)", "MAX",  "ACTIF"],
+            ["code",  "type",  "value",  "uses",  "remise_total","max_uses","is_active"],
+            [35, 22, 22, 20, 35, 20, 16],
         ),
     }
     data_key, col_labels, col_keys, col_widths = _table_cfg[section]
     rows = data.get(data_key, [])
 
     if rows:
-        pdf.set_font("Courier", "B", 9)
-        pdf.set_text_color(0, 0, 0)
-        pdf.cell(0, 6, f"// DONNEES  ({len(rows)} ligne{'s' if len(rows) > 1 else ''})", ln=1)
+        pdf.set_font("Courier", "", 7)
+        pdf.set_text_color(*_T_INK_DIM)
+        pdf.cell(0, 4, f"// DONNEES  ({len(rows)} LIGNE{'S' if len(rows) > 1 else ''})", ln=1)
         pdf.ln(1)
 
-        ROW_H = 5
+        # Cadre + crochets autour du tableau
+        x0 = 10
+        y0 = pdf.get_y()
+        total_w = sum(col_widths)
+        # placeholder pour calculer la hauteur — on dessine d'abord les rangées,
+        # puis on revient encadrer.
+        rows_to_render = rows[:80]
+        row_h = 5.2
+        header_h = 6.5
+        table_h = header_h + len(rows_to_render) * row_h
 
-        # En-tête tableau — fond noir, texte blanc
+        # En-tête : fond néon, texte noir
+        pdf.set_fill_color(*_T_NEON)
+        pdf.set_text_color(*_T_NEON_INK)
         pdf.set_font("Courier", "B", 7)
-        pdf.set_fill_color(15, 15, 15)
-        pdf.set_text_color(255, 255, 255)
+        pdf.set_xy(x0, y0)
         for lbl, w in zip(col_labels, col_widths):
             max_chars = max(3, int(w / 2.2))
-            txt = _safe(lbl)[:max_chars]
-            pdf.cell(w, ROW_H + 1, f" {txt}", border=1, fill=True)
+            pdf.cell(w, header_h, f" {_safe(lbl)[:max_chars]}", border=0, fill=True)
         pdf.ln()
 
-        # Lignes de données
-        for i, row in enumerate(rows[:100]):
+        # Lignes
+        pdf.set_font("Courier", "", 7)
+        for i, row in enumerate(rows_to_render):
             if i % 2 == 0:
-                pdf.set_fill_color(252, 252, 252)
+                pdf.set_fill_color(*_T_CARD)
             else:
-                pdf.set_fill_color(243, 243, 243)
-            pdf.set_text_color(25, 25, 25)
-            pdf.set_font("Courier", "", 7)
+                pdf.set_fill_color(*_T_CARD_ALT)
+            pdf.set_text_color(*_T_INK)
+
+            pdf.set_x(x0)
             for key, w in zip(col_keys, col_widths):
-                val = row.get(key, "")
+                # Spécial customers : afficher email complet pour le top, sinon masqué
+                if key == "__email":
+                    val = row.get("email") or row.get("email_masked") or "-"
+                else:
+                    val = row.get(key, "")
                 if val is None:               val = "-"
                 elif val is True:             val = "Oui"
                 elif val is False:            val = "Non"
@@ -808,18 +951,25 @@ def _make_pdf(section: str, start: datetime, end: datetime, data: dict) -> bytes
                     val = val[:10]
                 val = _safe(val)
                 max_chars = max(3, int(w / 2.0))
-                pdf.cell(w, ROW_H, f" {val[:max_chars]}", border="LR", fill=True)
+
+                # Mettre le meilleur client en évidence (néon sur fond sombre)
+                if key == "__email" and row.get("is_top"):
+                    pdf.set_text_color(*_T_NEON)
+                    pdf.set_font("Courier", "B", 7)
+                pdf.cell(w, row_h, f" {val[:max_chars]}", border=0, fill=True)
+                if key == "__email" and row.get("is_top"):
+                    pdf.set_text_color(*_T_INK)
+                    pdf.set_font("Courier", "", 7)
             pdf.ln()
 
-        # Ligne de fermeture du tableau
-        for w in col_widths:
-            pdf.cell(w, 0, "", border="T")
-        pdf.ln(2)
+        # Crochets autour du tableau
+        _brackets(pdf, x0, y0, total_w, table_h, color=_T_NEON, size=3.0, thick=0.5)
 
-        if len(rows) > 100:
+        if len(rows) > 80:
+            pdf.ln(1)
             pdf.set_font("Courier", "I", 7)
-            pdf.set_text_color(120, 120, 120)
-            pdf.cell(0, 5, f"  ... {len(rows) - 100} lignes supplementaires — voir export CSV", ln=1)
+            pdf.set_text_color(*_T_INK_DIM)
+            pdf.cell(0, 5, f"  ... {len(rows) - 80} lignes supplementaires - voir export CSV", ln=1)
 
         pdf.ln(3)
 
