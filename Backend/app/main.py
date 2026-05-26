@@ -20,6 +20,7 @@ from app.routes.ebooks import router as ebooks_router
 from app.routes.imports import router as imports_router
 from app.routes.orders import router as orders_router
 from app.routes.panel import router as panel_router
+from app.routes.panel_statistics import stats_router
 from app.routes.order_claim import router as claim_router
 from app.routes.products import router as products_router
 from app.routes.coupons import router as coupons_router
@@ -200,6 +201,7 @@ app.include_router(site_router,                         tags=["Site"])
 app.include_router(panel_router,                        tags=["Admin Panel"])
 app.include_router(claim_router,    prefix="/panel",    tags=["panel"])
 app.include_router(coupons_router, prefix="/coupons",   tags=["Coupons"])
+app.include_router(stats_router)
 
 
 if __name__ == "__main__":

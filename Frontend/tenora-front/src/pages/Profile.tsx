@@ -241,7 +241,7 @@ export default function Profile() {
               <input
                 value={phone}
                 onChange={(e) => setPhone(e.target.value)}
-                placeholder="+227 ..."
+                placeholder="XXXXXXXX"
                 className="w-full h-10 pl-10 pr-3 bg-input border border-border text-sm focus:outline-none focus:ring-2 focus:ring-primary/40 focus:border-primary"
               />
             </div>
