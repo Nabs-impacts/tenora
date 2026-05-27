@@ -122,6 +122,25 @@ class ProductUpdate(BaseModel):
     category_id: int | None = None
 
 
+# ─── SCHEMAS EBOOKS ───────────────────────────────────────────────────────────
+
+class EbookCreate(BaseModel):
+    category_id: int          # doit pointer vers une catégorie service_type == "ebook"
+    name: str
+    description: str = ""
+    price: float
+    discount_percent: float = 0
+    is_active: bool = True
+
+class EbookUpdate(BaseModel):
+    name: str | None = None
+    description: str | None = None
+    price: float | None = None
+    discount_percent: float | None = None
+    is_active: bool | None = None
+    category_id: int | None = None
+
+
 # ─── HELPERS ──────────────────────────────────────────────────────────────────
 
 def _compress_image(data: bytes, ext: str, max_px: int = 1400) -> bytes:
@@ -146,13 +165,17 @@ def _compress_image(data: bytes, ext: str, max_px: int = 1400) -> bytes:
         return data
 
 
-def save_image(file_data: bytes, filename: str, subfolder: str) -> str:
+def save_image(file_data: bytes, filename: str, subfolder: str, max_px: int = 1400) -> str:
+    """
+    Compresse puis upload une image. `max_px` permet d'augmenter la résolution
+    cible pour des contextes spécifiques (ex: couvertures d'ebooks → 2000 px).
+    """
     ext = filename.rsplit(".", 1)[-1].lower() if "." in filename else ""
     if ext not in ALLOWED_EXT:
         raise HTTPException(status_code=400, detail="Format non supporté — JPG, PNG ou WEBP uniquement.")
     if len(file_data) > 5 * 1024 * 1024:
         raise HTTPException(status_code=400, detail="Image trop lourde (max 5 MB).")
-    file_data = _compress_image(file_data, ext)
+    file_data = _compress_image(file_data, ext, max_px=max_px)
     return storage_upload(file_data, ext, subfolder)
 
 
@@ -687,6 +710,217 @@ def delete_category(
     return {"message": "Catégorie supprimée."}
 
 
+# ─── EBOOKS ───────────────────────────────────────────────────────────────────
+# Les ebooks sont des `Product` standards dont la catégorie a
+# `service_type == "ebook"`. Routes dédiées pour faciliter la gestion (image
+# de couverture haute résolution + PDF associé).
+
+def _ensure_ebook_category(db: Session, category_id: int) -> Category:
+    cat = db.query(Category).filter(Category.id == category_id).first()
+    if not cat:
+        raise HTTPException(status_code=404, detail="Catégorie introuvable.")
+    if cat.service_type != "ebook":
+        raise HTTPException(
+            status_code=422,
+            detail="La catégorie doit être de type 'ebook'.",
+        )
+    return cat
+
+
+def _ebook_payload(p: Product) -> dict:
+    return {
+        "id":               p.id,
+        "name":             p.name,
+        "description":      p.description,
+        "price":            float(p.price),
+        "discount_percent": float(p.discount_percent or 0),
+        "final_price":      float(p.final_price),
+        "is_active":        p.is_active,
+        "image_path":       p.image_path,
+        "pdf_path":         p.pdf_path,
+        "category_id":      p.category_id,
+        "category_name":    p.category.name if p.category else None,
+        "created_at":       p.created_at.isoformat(),
+    }
+
+
+@router.get("/ebooks")
+def list_ebooks(
+    q:           str | None = Query(None, description="Recherche par nom"),
+    category_id: int | None = Query(None),
+    is_active:   bool | None = Query(None),
+    db:          Session    = Depends(get_db),
+    admin:       User       = Depends(get_admin_user),
+):
+    base = (
+        db.query(Product)
+        .join(Category, Product.category_id == Category.id)
+        .options(joinedload(Product.category))
+        .filter(Category.service_type == "ebook")
+    )
+    if q:
+        base = base.filter(Product.name.ilike(f"%{q}%"))
+    if category_id is not None:
+        base = base.filter(Product.category_id == category_id)
+    if is_active is not None:
+        base = base.filter(Product.is_active == is_active)
+
+    items = base.order_by(Product.created_at.desc()).all()
+    return [_ebook_payload(p) for p in items]
+
+
+@router.post("/ebooks", status_code=201)
+def create_ebook(
+    data:  EbookCreate,
+    db:    Session = Depends(get_db),
+    admin: User    = Depends(get_admin_user),
+):
+    _ensure_ebook_category(db, data.category_id)
+
+    p = Product(
+        category_id=data.category_id,
+        name=data.name,
+        description=data.description,
+        price=data.price,
+        discount_percent=data.discount_percent,
+        stock=None,
+        required_fields=[],
+        whatsapp_redirect=False,
+        is_active=data.is_active,
+    )
+    db.add(p)
+    db.commit()
+    db.refresh(p)
+    logger.success(f"Ebook créé | id={p.id} | name={p.name} | admin_id={admin.id}")
+    return {"message": "Ebook créé.", "id": p.id}
+
+
+@router.put("/ebooks/{ebook_id}")
+def update_ebook(
+    ebook_id: int,
+    data:     EbookUpdate,
+    db:       Session = Depends(get_db),
+    admin:    User    = Depends(get_admin_user),
+):
+    p = (
+        db.query(Product)
+        .options(joinedload(Product.category))
+        .filter(Product.id == ebook_id)
+        .first()
+    )
+    if not p:
+        raise HTTPException(status_code=404, detail="Ebook introuvable.")
+
+    payload = data.model_dump(exclude_unset=True)
+    if "category_id" in payload and payload["category_id"] is not None:
+        _ensure_ebook_category(db, payload["category_id"])
+
+    for field, value in payload.items():
+        setattr(p, field, value)
+
+    db.commit()
+    db.refresh(p)
+    logger.info(f"Ebook mis à jour | id={ebook_id} | admin_id={admin.id}")
+    return {"message": "Ebook mis à jour."}
+
+
+@router.delete("/ebooks/{ebook_id}")
+def delete_ebook(
+    ebook_id: int,
+    db:       Session = Depends(get_db),
+    admin:    User    = Depends(get_admin_user),
+):
+    p = db.query(Product).filter(Product.id == ebook_id).first()
+    if not p:
+        raise HTTPException(status_code=404, detail="Ebook introuvable.")
+    storage_delete(p.image_path)
+    storage_delete(p.pdf_path)
+    db.delete(p)
+    db.commit()
+    logger.info(f"Ebook supprimé | id={ebook_id} | admin_id={admin.id}")
+    return {"message": "Ebook supprimé."}
+
+
+@router.post("/ebooks/{ebook_id}/image")
+async def upload_ebook_image(
+    ebook_id: int,
+    file:     UploadFile = File(...),
+    db:       Session    = Depends(get_db),
+    admin:    User       = Depends(get_admin_user),
+):
+    p = db.query(Product).filter(Product.id == ebook_id).first()
+    if not p:
+        raise HTTPException(status_code=404, detail="Ebook introuvable.")
+
+    storage_delete(p.image_path)
+    file_data    = await file.read()
+    p.image_path = save_image(
+        file_data,
+        file.filename or "cover.jpg",
+        "ebooks",
+        max_px=2000,
+    )
+    db.commit()
+    logger.info(f"Image ebook uploadée | id={ebook_id} | admin_id={admin.id}")
+    return {"message": "Image mise à jour.", "image_path": p.image_path}
+
+
+@router.delete("/ebooks/{ebook_id}/image")
+def delete_ebook_image(
+    ebook_id: int,
+    db:       Session = Depends(get_db),
+    admin:    User    = Depends(get_admin_user),
+):
+    p = db.query(Product).filter(Product.id == ebook_id).first()
+    if not p:
+        raise HTTPException(status_code=404, detail="Ebook introuvable.")
+    storage_delete(p.image_path)
+    p.image_path = None
+    db.commit()
+    return {"message": "Image supprimée."}
+
+
+@router.post("/ebooks/{ebook_id}/pdf")
+async def upload_ebook_pdf(
+    ebook_id: int,
+    file:     UploadFile = File(...),
+    db:       Session    = Depends(get_db),
+    admin:    User       = Depends(get_admin_user),
+):
+    p = db.query(Product).filter(Product.id == ebook_id).first()
+    if not p:
+        raise HTTPException(status_code=404, detail="Ebook introuvable.")
+
+    filename = (file.filename or "").lower()
+    if not filename.endswith(".pdf"):
+        raise HTTPException(status_code=400, detail="Le fichier doit être un PDF.")
+
+    file_data = await file.read()
+    if len(file_data) > 50 * 1024 * 1024:
+        raise HTTPException(status_code=400, detail="PDF trop lourd (max 50 MB).")
+
+    storage_delete(p.pdf_path)
+    p.pdf_path = storage_upload(file_data, "pdf", "ebooks/pdfs")
+    db.commit()
+    logger.info(f"PDF ebook uploadé | id={ebook_id} | admin_id={admin.id}")
+    return {"message": "PDF mis à jour.", "pdf_path": p.pdf_path}
+
+
+@router.delete("/ebooks/{ebook_id}/pdf")
+def delete_ebook_pdf(
+    ebook_id: int,
+    db:       Session = Depends(get_db),
+    admin:    User    = Depends(get_admin_user),
+):
+    p = db.query(Product).filter(Product.id == ebook_id).first()
+    if not p:
+        raise HTTPException(status_code=404, detail="Ebook introuvable.")
+    storage_delete(p.pdf_path)
+    p.pdf_path = None
+    db.commit()
+    return {"message": "PDF supprimé."}
+
+
 # ─── UTILISATEURS ─────────────────────────────────────────────────────────────
 
 @router.get("/users")
@@ -1015,6 +1249,7 @@ def create_coupon(
         max_uses         = data.max_uses,
         expires_at       = data.expires_at,
         is_active        = data.is_active,
+        ebook_only       = data.ebook_only,
     )
     if data.product_ids:
         coupon.products = db.query(Product).filter(Product.id.in_(data.product_ids)).all()
@@ -1049,7 +1284,7 @@ def update_coupon(
         coupon.discount_percent = new_pct
         coupon.discount_amount  = new_amt
 
-    for f in ("user_id", "max_uses", "expires_at", "is_active"):
+    for f in ("user_id", "max_uses", "expires_at", "is_active", "ebook_only"):
         if f in payload:
             setattr(coupon, f, payload[f])
 

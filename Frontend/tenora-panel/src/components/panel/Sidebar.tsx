@@ -1,7 +1,7 @@
-// === Remplace Sidebar.tsx en entier (ajout entrée 08 Statistiques) ===
+// === Remplace Sidebar.tsx en entier (ajout entrée 02.5 Ebooks) ===
 import { NavLink } from "react-router-dom";
 import {
-  LayoutDashboard, FolderTree, Package, ShoppingCart, Inbox, Users, Settings, Zap, Tag, BarChart2,
+  LayoutDashboard, FolderTree, Package, BookOpen, ShoppingCart, Inbox, Users, Settings, Zap, Tag, BarChart2,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -9,12 +9,13 @@ export const NAV = [
   { to: "/",           label: "Dashboard",   icon: LayoutDashboard, code: "00" },
   { to: "/categories", label: "Categories",  icon: FolderTree,      code: "01" },
   { to: "/products",   label: "Produits",    icon: Package,         code: "02" },
+  { to: "/ebooks",     label: "Ebooks",      icon: BookOpen,        code: "02.5" }, // NEW
   { to: "/orders",     label: "Commandes",   icon: ShoppingCart,    code: "03" },
   { to: "/imports",    label: "Imports",     icon: Inbox,           code: "04" },
   { to: "/users",      label: "Utilisateurs",icon: Users,           code: "05" },
   { to: "/settings",   label: "Parametres",  icon: Settings,        code: "06" },
   { to: "/coupons",    label: "Coupons",     icon: Tag,             code: "07" },
-  { to: "/statistics", label: "Statistiques",icon: BarChart2,       code: "08" }, // NEW
+  { to: "/statistics", label: "Statistiques",icon: BarChart2,       code: "08" },
 ];
 
 export function Sidebar() {

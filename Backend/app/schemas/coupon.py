@@ -18,6 +18,7 @@ class CouponBase(BaseModel):
     max_uses:   Optional[int] = Field(None, gt=0)
     expires_at: Optional[datetime] = None
     is_active:  bool = True
+    ebook_only: bool = False
     product_ids:  list[int] = []
     category_ids: list[int] = []
 
@@ -41,6 +42,7 @@ class CouponUpdate(BaseModel):
     max_uses:   Optional[int] = Field(None, gt=0)
     expires_at: Optional[datetime] = None
     is_active:  Optional[bool] = None
+    ebook_only: Optional[bool] = None
     product_ids:  Optional[list[int]] = None
     category_ids: Optional[list[int]] = None
 
@@ -57,6 +59,7 @@ class CouponResponse(BaseModel):
     times_used: int
     expires_at: Optional[datetime] = None
     is_active:  bool
+    ebook_only: bool = False
     created_at: datetime
     product_ids:  list[int] = []
     category_ids: list[int] = []
@@ -67,7 +70,9 @@ class CouponResponse(BaseModel):
             id=obj.id, code=obj.code,
             discount_percent=obj.discount_percent, discount_amount=obj.discount_amount,
             user_id=obj.user_id, max_uses=obj.max_uses, times_used=obj.times_used,
-            expires_at=obj.expires_at, is_active=obj.is_active, created_at=obj.created_at,
+            expires_at=obj.expires_at, is_active=obj.is_active,
+            ebook_only=bool(getattr(obj, "ebook_only", False)),
+            created_at=obj.created_at,
             product_ids=[p.id for p in obj.products],
             category_ids=[c.id for c in obj.categories],
         )

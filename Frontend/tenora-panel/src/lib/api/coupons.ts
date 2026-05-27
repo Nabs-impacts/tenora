@@ -10,6 +10,7 @@ export interface Coupon {
   times_used: number;
   expires_at: string | null;
   is_active:  boolean;
+  ebook_only: boolean;
   created_at: string;
   product_ids:  number[];
   category_ids: number[];
@@ -23,6 +24,7 @@ export interface CouponPayload {
   max_uses?: number | null;
   expires_at?: string | null;
   is_active?: boolean;
+  ebook_only?: boolean;
   product_ids?:  number[];
   category_ids?: number[];
 }

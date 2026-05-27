@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { Plus, Pencil, Trash2, Copy, Tag, Search, X, ChevronDown, ChevronUp } from "lucide-react";
+import { Plus, Pencil, Trash2, Copy, Tag, Search, X, ChevronDown, ChevronUp, BookOpen } from "lucide-react";
 import { format } from "date-fns";
 
 import { PageHeader } from "@/components/panel/PageHeader";
@@ -38,6 +38,7 @@ const empty = {
   max_uses: "",
   expires_at: "",
   is_active: true,
+  ebook_only: false,
   product_ids: [] as number[],
   category_ids: [] as number[],
 };
@@ -62,7 +63,6 @@ function FilterSection({
 
   return (
     <div className="border-2 border-border">
-      {/* Header cliquable */}
       <button
         type="button"
         onClick={() => setOpen((o) => !o)}
@@ -81,7 +81,6 @@ function FilterSection({
           : <ChevronDown className="h-4 w-4 shrink-0 text-muted-foreground" />}
       </button>
 
-      {/* Chips dans un flex-wrap — pas de scroll imbriqué */}
       {open && (
         <div className="px-3 pb-3 pt-1 border-t-2 border-border flex flex-wrap gap-2">
           {items.map((item) => {
@@ -173,6 +172,7 @@ export default function CouponsPage() {
       max_uses: c.max_uses ? String(c.max_uses) : "",
       expires_at: c.expires_at ? c.expires_at.slice(0, 16) : "",
       is_active: c.is_active,
+      ebook_only: !!c.ebook_only,
       product_ids: c.product_ids,
       category_ids: c.category_ids,
     });
@@ -189,6 +189,7 @@ export default function CouponsPage() {
       max_uses:   form.max_uses ? Number(form.max_uses) : null,
       expires_at: form.expires_at ? new Date(form.expires_at).toISOString() : null,
       is_active:  form.is_active,
+      ebook_only: form.ebook_only,
       product_ids:  form.product_ids,
       category_ids: form.category_ids,
     };
@@ -196,7 +197,6 @@ export default function CouponsPage() {
       updateM.mutate({ id: editing.id, data: payload });
     } else {
       const trimmed = form.code.trim();
-      // si l'utilisateur n'a tapé que le préfixe → on laisse le backend générer
       payload.code = trimmed && trimmed !== COUPON_PREFIX ? trimmed : undefined;
       createM.mutate(payload);
     }
@@ -223,7 +223,6 @@ export default function CouponsPage() {
   const totalActive = (couponsQ.data ?? []).filter((c) => c.is_active).length;
   const isSaving = createM.isPending || updateM.isPending;
 
-  // ─────────────────────────────────────────────────────────────────────
   return (
     <div className="space-y-5">
       <PageHeader
@@ -239,7 +238,6 @@ export default function CouponsPage() {
         }
       />
 
-      {/* ── Liste ── */}
       <DataCard className="brackets">
         <DataCardHeader>
           <div className="flex flex-col sm:flex-row sm:items-center gap-3 w-full">
@@ -297,6 +295,11 @@ export default function CouponsPage() {
                     </div>
                     <div className="flex flex-wrap gap-1.5 mb-2">
                       <span className="mono text-xs font-bold px-2 py-1 border-2 border-primary text-primary">{discount}</span>
+                      {c.ebook_only && (
+                        <span className="mono text-xs font-bold px-2 py-1 border-2 border-tertiary text-tertiary bg-tertiary-soft inline-flex items-center gap-1">
+                          <BookOpen className="h-3 w-3" /> EBOOK
+                        </span>
+                      )}
                       <span className="mono text-xs px-2 py-1 border-2 border-border text-foreground">
                         {c.times_used}{c.max_uses ? `/${c.max_uses}` : ""} util.
                       </span>
@@ -322,7 +325,6 @@ export default function CouponsPage() {
         </DataCardContent>
       </DataCard>
 
-      {/* ── Sheet formulaire (bottom on mobile, right on desktop) ── */}
       <Sheet open={showForm} onOpenChange={setShowForm}>
         <SheetContent
           side="bottom"
@@ -334,9 +336,7 @@ export default function CouponsPage() {
             sm:side-right sm:h-full sm:max-w-lg sm:border-l-2 sm:border-t-0
           "
         >
-          {/* Header fixe */}
           <SheetHeader className="px-5 pt-5 pb-4 border-b-2 border-border shrink-0">
-            {/* Drag handle — mobile hint */}
             <div className="w-10 h-1 bg-border rounded-full mx-auto mb-3 sm:hidden" />
             <SheetTitle className="mono uppercase tracking-wider text-sm flex items-center gap-2">
               <Tag className="h-4 w-4 text-primary" />
@@ -344,9 +344,7 @@ export default function CouponsPage() {
             </SheetTitle>
           </SheetHeader>
 
-          {/* Corps scrollable */}
           <div className="flex-1 overflow-y-auto px-5 py-4 space-y-5">
-
             {/* Code */}
             {!editing ? (
               <div className="space-y-3">
@@ -358,13 +356,11 @@ export default function CouponsPage() {
                     value={form.code}
                     onChange={(e) => {
                       let v = e.target.value.toUpperCase();
-                      // toujours conserver le préfixe TENORA-
                       if (!v.startsWith(COUPON_PREFIX)) v = COUPON_PREFIX;
                       if (v.length > COUPON_MAX_INPUT) v = v.slice(0, COUPON_MAX_INPUT);
                       setForm({ ...form, code: v });
                     }}
                     onKeyDown={(e) => {
-                      // empêche la suppression du préfixe
                       const t = e.currentTarget;
                       if ((e.key === "Backspace" || e.key === "Delete") &&
                           (t.selectionStart ?? 0) <= COUPON_PREFIX.length &&
@@ -373,7 +369,6 @@ export default function CouponsPage() {
                       }
                     }}
                     onFocus={(e) => {
-                      // place le curseur après le préfixe
                       const len = e.currentTarget.value.length;
                       requestAnimationFrame(() =>
                         e.currentTarget.setSelectionRange(Math.max(len, COUPON_PREFIX.length), Math.max(len, COUPON_PREFIX.length))
@@ -396,7 +391,7 @@ export default function CouponsPage() {
               </div>
             )}
 
-            {/* Réduction — type + valeur côte à côte */}
+            {/* Réduction */}
             <div className="grid grid-cols-2 gap-3">
               <div>
                 <Label className="eyebrow mb-1.5 block text-[10px] text-muted-foreground">TYPE</Label>
@@ -422,7 +417,6 @@ export default function CouponsPage() {
               </div>
             </div>
 
-            {/* Max utilisations + expiration côte à côte */}
             <div className="grid grid-cols-2 gap-3">
               <div>
                 <Label className="eyebrow mb-1.5 block text-[10px] text-muted-foreground">MAX UTILISATIONS</Label>
@@ -445,7 +439,6 @@ export default function CouponsPage() {
               </div>
             </div>
 
-            {/* User ID */}
             <div>
               <Label className="eyebrow mb-1.5 block text-[10px] text-muted-foreground">
                 RÉSERVÉ À UN UTILISATEUR (ID, OPTIONNEL)
@@ -460,7 +453,6 @@ export default function CouponsPage() {
               />
             </div>
 
-            {/* Catégories — collapsible chips */}
             <FilterSection
               label="CATÉGORIES ACTIVES"
               hint="vide = toutes les catégories"
@@ -469,7 +461,6 @@ export default function CouponsPage() {
               onToggle={toggleCid}
             />
 
-            {/* Produits — collapsible chips */}
             <FilterSection
               label="PRODUITS ACTIFS"
               hint="vide = tous les produits"
@@ -478,6 +469,26 @@ export default function CouponsPage() {
               onToggle={togglePid}
             />
 
+            {/* Ebook-only toggle */}
+            <div className="flex items-center justify-between border-2 border-border p-4">
+              <div className="flex items-center gap-3 min-w-0">
+                <BookOpen className="h-4 w-4 text-tertiary shrink-0" />
+                <div className="min-w-0">
+                  <Label htmlFor="ebook_only" className="mono text-xs uppercase tracking-wider block">
+                    Réservé aux ebooks
+                  </Label>
+                  <p className="mono text-[10px] text-muted-foreground mt-0.5">
+                    N'applique le coupon que sur les produits de catégorie « ebook ».
+                  </p>
+                </div>
+              </div>
+              <Switch
+                id="ebook_only"
+                checked={form.ebook_only}
+                onCheckedChange={(v) => setForm((f) => ({ ...f, ebook_only: v }))}
+              />
+            </div>
+
             {/* Actif toggle */}
             <div className="flex items-center justify-between border-2 border-border p-4">
               <Label className="mono text-xs uppercase tracking-wider">Coupon actif</Label>
@@ -485,7 +496,6 @@ export default function CouponsPage() {
             </div>
           </div>
 
-          {/* Footer fixe — boutons toujours visibles */}
           <div className="shrink-0 border-t-2 border-border p-4 flex gap-3 bg-card">
             <Button
               variant="outline"
@@ -505,7 +515,6 @@ export default function CouponsPage() {
         </SheetContent>
       </Sheet>
 
-      {/* ── Confirm suppression ── */}
       <AlertDialog open={!!delTarget} onOpenChange={(o) => !o && setDelTarget(null)}>
         <AlertDialogContent className="rounded-none border-2">
           <AlertDialogHeader>
