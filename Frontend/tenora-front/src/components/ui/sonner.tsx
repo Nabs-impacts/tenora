@@ -13,18 +13,46 @@ const Toaster = ({ ...props }: ToasterProps) => {
       toastOptions={{
         classNames: {
           toast:
-            "group toast overflow-hidden rounded-none border-2 bg-background text-foreground shadow-[6px_6px_0_0_hsl(var(--border))] before:absolute before:left-0 before:top-0 before:h-full before:w-1.5 before:bg-primary [&_[data-title]]:font-bold [&_[data-title]]:uppercase [&_[data-title]]:tracking-[0.12em] [&_[data-title]]:text-[12px]",
+            "group toast relative overflow-hidden rounded-none border border-border/50 bg-card/96 backdrop-blur-sm text-foreground " +
+            "shadow-[0_4px_24px_-4px_hsl(var(--background)/0.9)] " +
+            "before:absolute before:left-0 before:top-0 before:h-full before:w-[3px] before:bg-muted-foreground/40 " +
+            "[&_[data-title]]:font-bold [&_[data-title]]:uppercase [&_[data-title]]:tracking-[0.14em] [&_[data-title]]:text-[11px]",
+
           success:
-            "border-primary before:bg-primary shadow-[6px_6px_0_0_hsl(var(--primary)/0.55)] [&_[data-icon]]:text-primary [&_[data-title]]:text-primary",
+            "border-success/20 " +
+            "before:bg-success " +
+            "[&_[data-icon]]:text-success " +
+            "[&_[data-title]]:text-success",
+
           error:
-            "border-secondary before:bg-secondary shadow-[6px_6px_0_0_hsl(var(--secondary)/0.45)] [&_[data-icon]]:text-secondary [&_[data-title]]:text-secondary",
+            "border-destructive/20 " +
+            "before:bg-destructive " +
+            "[&_[data-icon]]:text-destructive " +
+            "[&_[data-title]]:text-destructive",
+
           warning:
-            "border-warning before:bg-warning shadow-[6px_6px_0_0_hsl(var(--warning)/0.45)] [&_[data-icon]]:text-warning [&_[data-title]]:text-warning",
+            "border-warning/20 " +
+            "before:bg-warning " +
+            "[&_[data-icon]]:text-warning " +
+            "[&_[data-title]]:text-warning",
+
           info:
-            "border-accent before:bg-accent shadow-[6px_6px_0_0_hsl(var(--accent)/0.4)] [&_[data-icon]]:text-accent [&_[data-title]]:text-accent",
-          description: "text-muted-foreground text-[12px] leading-relaxed",
-          actionButton: "rounded-none border border-primary bg-primary text-primary-foreground font-bold uppercase tracking-wider",
-          cancelButton: "rounded-none border border-border bg-muted text-muted-foreground font-bold uppercase tracking-wider",
+            "border-accent/20 " +
+            "before:bg-accent " +
+            "[&_[data-icon]]:text-accent " +
+            "[&_[data-title]]:text-accent",
+
+          description:
+            "text-muted-foreground text-[12px] leading-relaxed",
+
+          actionButton:
+            "rounded-none border border-primary bg-primary text-primary-foreground font-bold uppercase tracking-wider text-[11px]",
+
+          cancelButton:
+            "rounded-none border border-border bg-muted text-muted-foreground font-bold uppercase tracking-wider text-[11px]",
+
+          closeButton:
+            "rounded-none border border-border/40 text-muted-foreground hover:text-foreground hover:bg-muted/50",
         },
       }}
       {...props}
