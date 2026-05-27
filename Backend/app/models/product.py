@@ -1,6 +1,8 @@
 from datetime import datetime
 
-from sqlalchemy import JSON, Boolean, Column, DateTime, Float, ForeignKey, Integer, String, Text
+from sqlalchemy import (
+    JSON, Boolean, Column, DateTime, Float, ForeignKey, Integer, String, Text,
+)
 from sqlalchemy.orm import relationship
 
 from app.database import Base
@@ -29,7 +31,7 @@ class Product(Base):
     __tablename__ = "products"
 
     id                 = Column(Integer, primary_key=True, index=True)
-    category_id        = Column(Integer, ForeignKey("categories.id"), nullable=False)
+    category_id        = Column(Integer, ForeignKey("categories.id"), nullable=True)
     name               = Column(String(200), nullable=False)
     description        = Column(Text, nullable=True)
     price              = Column(Float, nullable=False)
@@ -42,8 +44,23 @@ class Product(Base):
     whatsapp_redirect  = Column(Boolean, default=False, nullable=False)
     created_at         = Column(DateTime, default=datetime.utcnow)
 
-    category = relationship("Category", back_populates="products")
-    orders   = relationship("Order", back_populates="product")
+    # ── Écosystème Ebooks (autonome) ──────────────────────────────────────
+    is_ebook           = Column(
+        Boolean, default=False, nullable=False, server_default="0",
+    )
+    ebook_category_id  = Column(
+        Integer,
+        ForeignKey("ebook_categories.id", ondelete="SET NULL"),
+        nullable=True, index=True,
+    )
+
+    category       = relationship("Category", back_populates="products")
+    ebook_category = relationship(
+        "EbookCategory",
+        back_populates="ebooks",
+        foreign_keys=[ebook_category_id],
+    )
+    orders         = relationship("Order", back_populates="product")
 
     @property
     def final_price(self) -> float:

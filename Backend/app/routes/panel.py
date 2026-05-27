@@ -15,6 +15,7 @@ from app.config import settings
 from app.database import get_db
 from app.dependencies import get_admin_user
 from app.models.coupon import Coupon
+from app.models.ebook import EbookCategory
 from app.models.import_request import ImportRequest
 from app.models.order import Order, OrderStatus
 from app.models.product import Category, Product
@@ -125,12 +126,12 @@ class ProductUpdate(BaseModel):
 # ─── SCHEMAS EBOOKS ───────────────────────────────────────────────────────────
 
 class EbookCreate(BaseModel):
-    category_id: int          # doit pointer vers une catégorie service_type == "ebook"
     name: str
     description: str = ""
     price: float
     discount_percent: float = 0
     is_active: bool = True
+    ebook_category_id: int | None = None     # optionnel à la création
 
 class EbookUpdate(BaseModel):
     name: str | None = None
@@ -138,7 +139,22 @@ class EbookUpdate(BaseModel):
     price: float | None = None
     discount_percent: float | None = None
     is_active: bool | None = None
-    category_id: int | None = None
+    ebook_category_id: int | None = None
+
+
+# ─── SCHEMAS EBOOK CATEGORIES (genres / bibliothèque) ─────────────────────────
+
+class EbookCategoryCreate(BaseModel):
+    name: str
+    slug: str
+    description: str = ""
+    is_active: bool = True
+
+class EbookCategoryUpdate(BaseModel):
+    name: str | None = None
+    slug: str | None = None
+    description: str | None = None
+    is_active: bool | None = None
 
 
 # ─── HELPERS ──────────────────────────────────────────────────────────────────
@@ -710,58 +726,151 @@ def delete_category(
     return {"message": "Catégorie supprimée."}
 
 
-# ─── EBOOKS ───────────────────────────────────────────────────────────────────
-# Les ebooks sont des `Product` standards dont la catégorie a
-# `service_type == "ebook"`. Routes dédiées pour faciliter la gestion (image
-# de couverture haute résolution + PDF associé).
+# ─── EBOOK CATEGORIES (genres bibliothèque) ──────────────────────────────────
+# Écosystème ebooks 100% autonome — table dédiée `ebook_categories`,
+# aucune dépendance avec `categories` / `service_type`.
 
-def _ensure_ebook_category(db: Session, category_id: int) -> Category:
-    cat = db.query(Category).filter(Category.id == category_id).first()
-    if not cat:
-        raise HTTPException(status_code=404, detail="Catégorie introuvable.")
-    if cat.service_type != "ebook":
-        raise HTTPException(
-            status_code=422,
-            detail="La catégorie doit être de type 'ebook'.",
+@router.get("/ebook-categories")
+def list_ebook_categories(
+    db:    Session = Depends(get_db),
+    admin: User    = Depends(get_admin_user),
+):
+    rows = (
+        db.query(
+            EbookCategory,
+            func.count(Product.id).label("ebook_count"),
         )
-    return cat
+        .outerjoin(Product, Product.ebook_category_id == EbookCategory.id)
+        .group_by(EbookCategory.id)
+        .order_by(EbookCategory.name)
+        .all()
+    )
+    return [
+        {
+            "id":          c.id,
+            "name":        c.name,
+            "slug":        c.slug,
+            "description": c.description,
+            "is_active":   c.is_active,
+            "created_at":  c.created_at.isoformat() if c.created_at else None,
+            "ebook_count": int(count),
+        }
+        for c, count in rows
+    ]
 
+
+@router.post("/ebook-categories", status_code=201)
+def create_ebook_category(
+    data:  EbookCategoryCreate,
+    db:    Session = Depends(get_db),
+    admin: User    = Depends(get_admin_user),
+):
+    try:
+        cat = EbookCategory(**data.model_dump())
+        db.add(cat)
+        db.commit()
+        db.refresh(cat)
+        logger.success(f"Ebook genre créé | id={cat.id} | name={cat.name} | admin_id={admin.id}")
+        return {"message": "Genre créé.", "id": cat.id}
+    except IntegrityError:
+        db.rollback()
+        raise HTTPException(status_code=409, detail="Nom ou slug déjà utilisé.")
+
+
+@router.put("/ebook-categories/{cat_id}")
+def update_ebook_category(
+    cat_id: int,
+    data:   EbookCategoryUpdate,
+    db:     Session = Depends(get_db),
+    admin:  User    = Depends(get_admin_user),
+):
+    cat = db.query(EbookCategory).filter(EbookCategory.id == cat_id).first()
+    if not cat:
+        raise HTTPException(status_code=404, detail="Genre introuvable.")
+    payload = data.model_dump(exclude_unset=True)
+    for field, value in payload.items():
+        setattr(cat, field, value)
+    try:
+        db.commit()
+        db.refresh(cat)
+    except IntegrityError:
+        db.rollback()
+        raise HTTPException(status_code=409, detail="Nom ou slug déjà utilisé.")
+    logger.info(f"Ebook genre mis à jour | id={cat_id} | admin_id={admin.id}")
+    return {"message": "Genre mis à jour."}
+
+
+@router.delete("/ebook-categories/{cat_id}")
+def delete_ebook_category(
+    cat_id: int,
+    db:     Session = Depends(get_db),
+    admin:  User    = Depends(get_admin_user),
+):
+    cat = db.query(EbookCategory).filter(EbookCategory.id == cat_id).first()
+    if not cat:
+        raise HTTPException(status_code=404, detail="Genre introuvable.")
+    linked = (
+        db.query(func.count(Product.id))
+        .filter(Product.ebook_category_id == cat_id)
+        .scalar() or 0
+    )
+    if linked > 0:
+        raise HTTPException(
+            status_code=409,
+            detail=f"{linked} ebook(s) sont rattachés à ce genre. Réassignez-les d'abord.",
+        )
+    db.delete(cat)
+    db.commit()
+    logger.info(f"Ebook genre supprimé | id={cat_id} | admin_id={admin.id}")
+    return {"message": "Genre supprimé."}
+
+
+# ─── EBOOKS ───────────────────────────────────────────────────────────────────
+# Les ebooks sont des `Product` avec `is_ebook = True`, optionnellement
+# rattachés à un `EbookCategory`. Aucun lien avec `Category.service_type`.
 
 def _ebook_payload(p: Product) -> dict:
     return {
-        "id":               p.id,
-        "name":             p.name,
-        "description":      p.description,
-        "price":            float(p.price),
-        "discount_percent": float(p.discount_percent or 0),
-        "final_price":      float(p.final_price),
-        "is_active":        p.is_active,
-        "image_path":       p.image_path,
-        "pdf_path":         p.pdf_path,
-        "category_id":      p.category_id,
-        "category_name":    p.category.name if p.category else None,
-        "created_at":       p.created_at.isoformat(),
+        "id":                  p.id,
+        "name":                p.name,
+        "description":         p.description,
+        "price":               float(p.price),
+        "discount_percent":    float(p.discount_percent or 0),
+        "final_price":         float(p.final_price),
+        "is_active":           p.is_active,
+        "image_path":          p.image_path,
+        "pdf_path":            p.pdf_path,
+        "ebook_category_id":   p.ebook_category_id,
+        "ebook_category_name": p.ebook_category.name if p.ebook_category else None,
+        "created_at":          p.created_at.isoformat(),
     }
+
+
+def _ensure_ebook_genre(db: Session, ebook_category_id: int | None) -> None:
+    if ebook_category_id is None:
+        return
+    exists = db.query(EbookCategory.id).filter(EbookCategory.id == ebook_category_id).first()
+    if not exists:
+        raise HTTPException(status_code=404, detail="Genre introuvable.")
 
 
 @router.get("/ebooks")
 def list_ebooks(
-    q:           str | None = Query(None, description="Recherche par nom"),
-    category_id: int | None = Query(None),
-    is_active:   bool | None = Query(None),
-    db:          Session    = Depends(get_db),
-    admin:       User       = Depends(get_admin_user),
+    q:                 str | None  = Query(None, description="Recherche par nom"),
+    ebook_category_id: int | None  = Query(None),
+    is_active:         bool | None = Query(None),
+    db:                Session     = Depends(get_db),
+    admin:             User        = Depends(get_admin_user),
 ):
     base = (
         db.query(Product)
-        .join(Category, Product.category_id == Category.id)
-        .options(joinedload(Product.category))
-        .filter(Category.service_type == "ebook")
+        .options(joinedload(Product.ebook_category))
+        .filter(Product.is_ebook == True)  # noqa: E712
     )
     if q:
         base = base.filter(Product.name.ilike(f"%{q}%"))
-    if category_id is not None:
-        base = base.filter(Product.category_id == category_id)
+    if ebook_category_id is not None:
+        base = base.filter(Product.ebook_category_id == ebook_category_id)
     if is_active is not None:
         base = base.filter(Product.is_active == is_active)
 
@@ -775,10 +884,10 @@ def create_ebook(
     db:    Session = Depends(get_db),
     admin: User    = Depends(get_admin_user),
 ):
-    _ensure_ebook_category(db, data.category_id)
+    _ensure_ebook_genre(db, data.ebook_category_id)
 
     p = Product(
-        category_id=data.category_id,
+        category_id=None,                # plus de dépendance Category
         name=data.name,
         description=data.description,
         price=data.price,
@@ -787,6 +896,8 @@ def create_ebook(
         required_fields=[],
         whatsapp_redirect=False,
         is_active=data.is_active,
+        is_ebook=True,
+        ebook_category_id=data.ebook_category_id,
     )
     db.add(p)
     db.commit()
@@ -804,16 +915,16 @@ def update_ebook(
 ):
     p = (
         db.query(Product)
-        .options(joinedload(Product.category))
-        .filter(Product.id == ebook_id)
+        .options(joinedload(Product.ebook_category))
+        .filter(Product.id == ebook_id, Product.is_ebook == True)  # noqa: E712
         .first()
     )
     if not p:
         raise HTTPException(status_code=404, detail="Ebook introuvable.")
 
     payload = data.model_dump(exclude_unset=True)
-    if "category_id" in payload and payload["category_id"] is not None:
-        _ensure_ebook_category(db, payload["category_id"])
+    if "ebook_category_id" in payload:
+        _ensure_ebook_genre(db, payload["ebook_category_id"])
 
     for field, value in payload.items():
         setattr(p, field, value)
@@ -830,7 +941,9 @@ def delete_ebook(
     db:       Session = Depends(get_db),
     admin:    User    = Depends(get_admin_user),
 ):
-    p = db.query(Product).filter(Product.id == ebook_id).first()
+    p = db.query(Product).filter(
+        Product.id == ebook_id, Product.is_ebook == True  # noqa: E712
+    ).first()
     if not p:
         raise HTTPException(status_code=404, detail="Ebook introuvable.")
     storage_delete(p.image_path)
@@ -848,7 +961,9 @@ async def upload_ebook_image(
     db:       Session    = Depends(get_db),
     admin:    User       = Depends(get_admin_user),
 ):
-    p = db.query(Product).filter(Product.id == ebook_id).first()
+    p = db.query(Product).filter(
+        Product.id == ebook_id, Product.is_ebook == True  # noqa: E712
+    ).first()
     if not p:
         raise HTTPException(status_code=404, detail="Ebook introuvable.")
 
@@ -871,7 +986,9 @@ def delete_ebook_image(
     db:       Session = Depends(get_db),
     admin:    User    = Depends(get_admin_user),
 ):
-    p = db.query(Product).filter(Product.id == ebook_id).first()
+    p = db.query(Product).filter(
+        Product.id == ebook_id, Product.is_ebook == True  # noqa: E712
+    ).first()
     if not p:
         raise HTTPException(status_code=404, detail="Ebook introuvable.")
     storage_delete(p.image_path)
@@ -887,13 +1004,11 @@ async def upload_ebook_pdf(
     db:       Session    = Depends(get_db),
     admin:    User       = Depends(get_admin_user),
 ):
-    p = db.query(Product).filter(Product.id == ebook_id).first()
+    p = db.query(Product).filter(
+        Product.id == ebook_id, Product.is_ebook == True  # noqa: E712
+    ).first()
     if not p:
         raise HTTPException(status_code=404, detail="Ebook introuvable.")
-
-    filename = (file.filename or "").lower()
-    if not filename.endswith(".pdf"):
-        raise HTTPException(status_code=400, detail="Le fichier doit être un PDF.")
 
     file_data = await file.read()
     if len(file_data) > 50 * 1024 * 1024:
@@ -903,7 +1018,7 @@ async def upload_ebook_pdf(
     p.pdf_path = storage_upload(file_data, "pdf", "ebooks/pdfs")
     db.commit()
     logger.info(f"PDF ebook uploadé | id={ebook_id} | admin_id={admin.id}")
-    return {"message": "PDF mis à jour.", "pdf_path": p.pdf_path}
+    return {"message": "PDF uploadé.", "pdf_path": p.pdf_path}
 
 
 @router.delete("/ebooks/{ebook_id}/pdf")
@@ -912,7 +1027,9 @@ def delete_ebook_pdf(
     db:       Session = Depends(get_db),
     admin:    User    = Depends(get_admin_user),
 ):
-    p = db.query(Product).filter(Product.id == ebook_id).first()
+    p = db.query(Product).filter(
+        Product.id == ebook_id, Product.is_ebook == True  # noqa: E712
+    ).first()
     if not p:
         raise HTTPException(status_code=404, detail="Ebook introuvable.")
     storage_delete(p.pdf_path)

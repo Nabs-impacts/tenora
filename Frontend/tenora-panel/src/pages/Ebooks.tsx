@@ -1,7 +1,7 @@
 import { useEffect, useState, useCallback, useMemo } from "react";
 import {
   Plus, Search, Pencil, Trash2, ImageIcon, FileText, BookOpen,
-  MoreVertical, Upload, X, CheckCircle2, AlertCircle,
+  MoreVertical, Upload, X, CheckCircle2, Tag,
 } from "lucide-react";
 import { PageHeader } from "@/components/panel/PageHeader";
 import { StatusBadge } from "@/components/panel/StatusBadge";
@@ -31,7 +31,10 @@ import {
   uploadEbookImage, deleteEbookImage,
   uploadEbookPdf, deleteEbookPdf,
 } from "@/lib/api/ebooks";
-import { getCategories } from "@/lib/api/categories";
+import {
+  getEbookCategories, createEbookCategory, updateEbookCategory, deleteEbookCategory,
+  type EbookCat,
+} from "@/lib/api/ebook-categories";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import api from "@/lib/api/client";
@@ -46,22 +49,16 @@ interface Ebook {
   is_active: boolean;
   image_path?: string;
   pdf_path?: string;
-  category_id?: number;
-  category_name?: string;
+  ebook_category_id?: number | null;
+  ebook_category_name?: string | null;
   created_at: string;
-}
-
-interface Cat {
-  id: number;
-  name: string;
-  service_type?: string;
 }
 
 interface FormState {
   name: string;
   price: number;
   description: string;
-  category_id: string;
+  ebook_category_id: string;
   is_active: boolean;
   discount_percent: string;
 }
@@ -70,10 +67,13 @@ const empty: FormState = {
   name: "",
   price: 0,
   description: "",
-  category_id: "",
+  ebook_category_id: "",
   is_active: true,
   discount_percent: "",
 };
+
+const slugify = (s: string) =>
+  s.toLowerCase().trim().replace(/\s+/g, "-").replace(/[^a-z0-9-]/g, "");
 
 const imgUrl = (p?: string) => {
   if (!p) return "";
@@ -92,7 +92,7 @@ const pdfBasename = (p?: string) => {
 
 export default function Ebooks() {
   const [ebooks, setEbooks] = useState<Ebook[]>([]);
-  const [cats, setCats] = useState<Cat[]>([]);
+  const [cats, setCats] = useState<EbookCat[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
 
@@ -107,27 +107,40 @@ export default function Ebooks() {
   const [delDialog, setDelDialog] = useState(false);
   const [toDelete, setToDelete] = useState<Ebook | null>(null);
 
+  // Genre dialog
+  const [genreOpen, setGenreOpen] = useState(false);
+  const [genreEditing, setGenreEditing] = useState<EbookCat | null>(null);
+  const [genreForm, setGenreForm] = useState({
+    name: "", slug: "", description: "", is_active: true,
+  });
+  const [genreSaving, setGenreSaving] = useState(false);
+
   // ── Data ─────────────────────────────────────────────────────────────
-  const load = useCallback(async () => {
-    setLoading(true);
+  const loadEbooks = useCallback(async () => {
     try {
-      const [e, c] = await Promise.all([getEbooks(), getCategories()]);
-      setEbooks(e.data || []);
-      setCats(c.data || []);
-    } catch (err) {
-      console.error(err);
-      toast.error("Erreur de chargement");
-    } finally {
-      setLoading(false);
+      const { data } = await getEbooks();
+      setEbooks(data || []);
+    } catch {
+      toast.error("Erreur de chargement des ebooks");
     }
   }, []);
 
-  useEffect(() => { load(); }, [load]);
+  const loadCats = useCallback(async () => {
+    try {
+      const { data } = await getEbookCategories();
+      setCats(data || []);
+    } catch {
+      toast.error("Erreur de chargement des genres");
+    }
+  }, []);
 
-  const ebookCats = useMemo(
-    () => cats.filter((c) => c.service_type === "ebook"),
-    [cats]
-  );
+  const loadAll = useCallback(async () => {
+    setLoading(true);
+    await Promise.all([loadEbooks(), loadCats()]);
+    setLoading(false);
+  }, [loadEbooks, loadCats]);
+
+  useEffect(() => { loadAll(); }, [loadAll]);
 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
@@ -135,11 +148,11 @@ export default function Ebooks() {
     return ebooks.filter(
       (e) =>
         e.name?.toLowerCase().includes(q) ||
-        e.category_name?.toLowerCase().includes(q)
+        e.ebook_category_name?.toLowerCase().includes(q),
     );
   }, [ebooks, search]);
 
-  // ── Form ─────────────────────────────────────────────────────────────
+  // ── Form ebook ───────────────────────────────────────────────────────
   const openCreate = () => {
     setEditing(null);
     setForm(empty);
@@ -155,7 +168,7 @@ export default function Ebooks() {
       name: e.name || "",
       price: e.price || 0,
       description: e.description || "",
-      category_id: e.category_id?.toString() || "",
+      ebook_category_id: e.ebook_category_id?.toString() || "",
       is_active: e.is_active ?? true,
       discount_percent: e.discount_percent ? String(e.discount_percent) : "",
     });
@@ -166,8 +179,7 @@ export default function Ebooks() {
   };
 
   const handleSave = async () => {
-    if (!form.name.trim()) { toast.error("Nom requis"); return; }
-    if (!form.category_id) { toast.error("Catégorie ebook requise"); return; }
+    if (!form.name.trim()) { toast.error("Titre requis"); return; }
 
     const discount = form.discount_percent === "" ? null : Number(form.discount_percent);
     if (discount != null && (discount <= 0 || discount >= 100)) {
@@ -181,7 +193,7 @@ export default function Ebooks() {
         name: form.name.trim(),
         description: form.description,
         price: Number(form.price) || 0,
-        category_id: Number(form.category_id),
+        ebook_category_id: form.ebook_category_id ? Number(form.ebook_category_id) : null,
         discount_percent: discount,
         is_active: form.is_active,
       };
@@ -206,7 +218,7 @@ export default function Ebooks() {
       }
 
       setShowForm(false);
-      load();
+      loadEbooks();
     } catch (err: any) {
       toast.error(err?.response?.data?.detail || "Erreur lors de la sauvegarde");
     } finally {
@@ -219,7 +231,7 @@ export default function Ebooks() {
     try {
       await deleteEbook(toDelete.id);
       toast.success("Ebook supprimé");
-      load();
+      loadEbooks();
     } catch {
       toast.error("Erreur lors de la suppression");
     } finally {
@@ -228,7 +240,7 @@ export default function Ebooks() {
     }
   };
 
-  // ── Quick uploads (depuis le menu actions de la liste) ───────────────
+  // ── Quick uploads ────────────────────────────────────────────────────
   const pickAndUpload = (
     accept: string,
     handler: (file: File) => Promise<void>,
@@ -239,9 +251,8 @@ export default function Ebooks() {
     input.onchange = async () => {
       const file = input.files?.[0];
       if (!file) return;
-      try {
-        await handler(file);
-      } catch (err: any) {
+      try { await handler(file); }
+      catch (err: any) {
         toast.error(err?.response?.data?.detail || "Erreur upload");
       }
     };
@@ -252,14 +263,14 @@ export default function Ebooks() {
     pickAndUpload("image/*", async (file) => {
       await uploadEbookImage(e.id, file);
       toast.success("Couverture mise à jour");
-      load();
+      loadEbooks();
     });
 
   const quickUploadPdf = (e: Ebook) =>
     pickAndUpload(".pdf,application/pdf", async (file) => {
       await uploadEbookPdf(e.id, file);
       toast.success("PDF uploadé");
-      load();
+      loadEbooks();
     });
 
   const handleDeleteImageInForm = async () => {
@@ -268,7 +279,7 @@ export default function Ebooks() {
         await deleteEbookImage(editing.id);
         toast.success("Image supprimée");
         setEditing({ ...editing, image_path: undefined });
-        load();
+        loadEbooks();
       } catch {
         toast.error("Erreur suppression image");
         return;
@@ -284,7 +295,7 @@ export default function Ebooks() {
         await deleteEbookPdf(editing.id);
         toast.success("PDF supprimé");
         setEditing({ ...editing, pdf_path: undefined });
-        load();
+        loadEbooks();
       } catch {
         toast.error("Erreur suppression PDF");
         return;
@@ -293,13 +304,109 @@ export default function Ebooks() {
     setPendingPdf(null);
   };
 
+  // ── Genres ───────────────────────────────────────────────────────────
+  const openGenreCreate = () => {
+    setGenreEditing(null);
+    setGenreForm({ name: "", slug: "", description: "", is_active: true });
+    setGenreOpen(true);
+  };
+
+  const openGenreEdit = (c: EbookCat) => {
+    setGenreEditing(c);
+    setGenreForm({
+      name: c.name,
+      slug: c.slug,
+      description: c.description || "",
+      is_active: c.is_active,
+    });
+    setGenreOpen(true);
+  };
+
+  const handleGenreSave = async () => {
+    if (!genreForm.name.trim()) { toast.error("Nom requis"); return; }
+    const slug = genreForm.slug.trim() || slugify(genreForm.name);
+    if (!slug) { toast.error("Slug invalide"); return; }
+
+    setGenreSaving(true);
+    try {
+      if (genreEditing) {
+        await updateEbookCategory(genreEditing.id, {
+          name: genreForm.name.trim(),
+          slug,
+          description: genreForm.description,
+          is_active: genreForm.is_active,
+        });
+        toast.success("Genre mis à jour");
+      } else {
+        await createEbookCategory({
+          name: genreForm.name.trim(),
+          slug,
+          description: genreForm.description,
+          is_active: genreForm.is_active,
+        });
+        toast.success("Genre créé");
+      }
+      setGenreOpen(false);
+      loadCats();
+    } catch (err: any) {
+      toast.error(err?.response?.data?.detail || "Erreur");
+    } finally {
+      setGenreSaving(false);
+    }
+  };
+
+  const handleGenreDelete = async (c: EbookCat) => {
+    if (!confirm(`Supprimer le genre "${c.name}" ?`)) return;
+    try {
+      await deleteEbookCategory(c.id);
+      toast.success("Genre supprimé");
+      loadCats();
+    } catch (err: any) {
+      if (err?.response?.status === 409) {
+        toast.error("Ce genre contient des ebooks. Réassignez-les d'abord.");
+      } else {
+        toast.error(err?.response?.data?.detail || "Erreur");
+      }
+    }
+  };
+
+  const handleGenreToggle = async (c: EbookCat) => {
+    try {
+      await updateEbookCategory(c.id, { is_active: !c.is_active });
+      loadCats();
+    } catch {
+      toast.error("Erreur");
+    }
+  };
+
+  // Quick-create from inside the ebook form
+  const handleQuickGenreCreate = async (name: string) => {
+    const trimmed = name.trim();
+    if (!trimmed) return;
+    try {
+      const { data } = await createEbookCategory({
+        name: trimmed,
+        slug: slugify(trimmed),
+        description: "",
+        is_active: true,
+      });
+      toast.success("Genre créé");
+      await loadCats();
+      if (data?.id) {
+        setForm((f) => ({ ...f, ebook_category_id: String(data.id) }));
+      }
+    } catch (err: any) {
+      toast.error(err?.response?.data?.detail || "Erreur");
+    }
+  };
+
   // ── Render ───────────────────────────────────────────────────────────
   return (
     <div className="space-y-6 animate-fade-up">
       <PageHeader
         eyebrow="// 02.5 — bibliothèque"
         title="Ebooks"
-        subtitle={`// ${ebooks.length} ebook${ebooks.length > 1 ? "s" : ""}`}
+        subtitle={`// ${ebooks.length} ebook${ebooks.length > 1 ? "s" : ""} · ${cats.length} genre${cats.length > 1 ? "s" : ""}`}
       >
         <Button
           onClick={openCreate}
@@ -309,6 +416,84 @@ export default function Ebooks() {
         </Button>
       </PageHeader>
 
+      {/* ── Zone 1 — Genres / Catégories ebooks ── */}
+      <DataCard>
+        <DataCardHeader>
+          <div className="flex items-center gap-2 min-w-0">
+            <Tag className="h-4 w-4 text-primary shrink-0" />
+            <span className="eyebrow text-[10px] text-muted-foreground">
+              // genres ({cats.length})
+            </span>
+          </div>
+          <Button
+            onClick={openGenreCreate}
+            size="sm"
+            variant="outline"
+            className="ml-auto h-8 rounded-none border-2 mono uppercase tracking-wider text-[10px]"
+          >
+            <Plus className="h-3 w-3 mr-1.5" /> Nouveau genre
+          </Button>
+        </DataCardHeader>
+        <DataCardContent>
+          {cats.length === 0 ? (
+            <p className="text-xs mono text-muted-foreground py-3">
+              // Aucun genre pour l'instant — créez-en un pour organiser votre bibliothèque
+              (totalement optionnel).
+            </p>
+          ) : (
+            <div className="flex flex-wrap gap-2 py-2">
+              {cats.map((c) => (
+                <div
+                  key={c.id}
+                  className={cn(
+                    "inline-flex items-center gap-1.5 border-2 px-2 py-1 mono text-[11px] uppercase tracking-wider",
+                    c.is_active
+                      ? "border-primary/40 bg-primary/5 text-foreground"
+                      : "border-border bg-muted text-muted-foreground",
+                  )}
+                >
+                  <button
+                    onClick={() => openGenreEdit(c)}
+                    className="font-bold hover:text-primary"
+                    title="Éditer"
+                  >
+                    {c.name}
+                  </button>
+                  {typeof c.ebook_count === "number" && (
+                    <span className="text-[9px] text-muted-foreground">·{c.ebook_count}</span>
+                  )}
+                  {!c.is_active && (
+                    <span className="text-[9px] text-muted-foreground">// off</span>
+                  )}
+                  <button
+                    onClick={() => handleGenreToggle(c)}
+                    className="opacity-60 hover:opacity-100"
+                    title={c.is_active ? "Désactiver" : "Activer"}
+                  >
+                    <Switch checked={c.is_active} className="scale-50 -my-2" />
+                  </button>
+                  <button
+                    onClick={() => openGenreEdit(c)}
+                    className="text-muted-foreground hover:text-primary"
+                    title="Éditer"
+                  >
+                    <Pencil className="h-3 w-3" />
+                  </button>
+                  <button
+                    onClick={() => handleGenreDelete(c)}
+                    className="text-muted-foreground hover:text-destructive"
+                    title="Supprimer"
+                  >
+                    <Trash2 className="h-3 w-3" />
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
+        </DataCardContent>
+      </DataCard>
+
+      {/* ── Zone 2 — Liste ebooks ── */}
       <DataCard>
         <DataCardHeader>
           <div className="relative flex-1 min-w-0 sm:max-w-xs">
@@ -350,7 +535,7 @@ export default function Ebooks() {
         </DataCardContent>
       </DataCard>
 
-      {/* ── Dialog création/édition ── */}
+      {/* ── Dialog création/édition ebook ── */}
       <Dialog open={showForm} onOpenChange={setShowForm}>
         <DialogContent className="rounded-none border-2 max-w-2xl max-h-[90dvh] overflow-y-auto w-[calc(100vw-2rem)] sm:w-full">
           <DialogHeader>
@@ -404,27 +589,39 @@ export default function Ebooks() {
 
             <div>
               <Label className="eyebrow mb-1.5 block" style={{ color: "hsl(var(--muted-foreground))" }}>
-                Catégorie (ebook)
+                Genre (optionnel)
               </Label>
-              {ebookCats.length === 0 ? (
-                <div className="border-2 border-dashed border-warning/60 p-3 mono text-xs text-warning flex items-center gap-2">
-                  <AlertCircle className="h-4 w-4 shrink-0" />
-                  Aucune catégorie « ebook ». Créez-en une depuis Catégories.
-                </div>
+              {cats.length === 0 ? (
+                <QuickGenreInline onCreate={handleQuickGenreCreate} />
               ) : (
-                <Select
-                  value={form.category_id}
-                  onValueChange={(v) => setForm({ ...form, category_id: v })}
-                >
-                  <SelectTrigger className="rounded-none border-2 mono">
-                    <SelectValue placeholder="Sélectionner" />
-                  </SelectTrigger>
-                  <SelectContent className="rounded-none border-2">
-                    {ebookCats.map((c) => (
-                      <SelectItem key={c.id} value={c.id.toString()}>{c.name}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                <div className="flex gap-2">
+                  <Select
+                    value={form.ebook_category_id || "none"}
+                    onValueChange={(v) =>
+                      setForm({ ...form, ebook_category_id: v === "none" ? "" : v })
+                    }
+                  >
+                    <SelectTrigger className="rounded-none border-2 mono flex-1">
+                      <SelectValue placeholder="— Aucun —" />
+                    </SelectTrigger>
+                    <SelectContent className="rounded-none border-2">
+                      <SelectItem value="none">— Aucun —</SelectItem>
+                      {cats.filter((c) => c.is_active).map((c) => (
+                        <SelectItem key={c.id} value={c.id.toString()}>{c.name}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={openGenreCreate}
+                    className="rounded-none border-2 mono uppercase text-[10px] shrink-0"
+                    title="Nouveau genre"
+                  >
+                    <Plus className="h-3.5 w-3.5" />
+                  </Button>
+                </div>
               )}
             </div>
 
@@ -440,7 +637,7 @@ export default function Ebooks() {
               />
             </div>
 
-            {/* ── Couverture ── */}
+            {/* Couverture */}
             <div className="border-2 border-border p-4 space-y-3">
               <div className="flex items-center gap-2">
                 <ImageIcon className="h-4 w-4 text-primary" />
@@ -493,7 +690,7 @@ export default function Ebooks() {
               )}
             </div>
 
-            {/* ── PDF ── */}
+            {/* PDF */}
             <div className="border-2 border-border p-4 space-y-3">
               <div className="flex items-center gap-2">
                 <FileText className="h-4 w-4 text-primary" />
@@ -539,7 +736,7 @@ export default function Ebooks() {
               </p>
             </div>
 
-            {/* ── Statut ── */}
+            {/* Statut */}
             <div className="flex items-center justify-between border-2 border-border p-4">
               <Label className="mono text-xs uppercase tracking-wider">Ebook actif</Label>
               <Switch
@@ -560,10 +757,84 @@ export default function Ebooks() {
             </Button>
             <Button
               onClick={handleSave}
-              disabled={saving || ebookCats.length === 0}
+              disabled={saving}
               className="rounded-none border-2 border-primary bg-primary text-primary-foreground hover:bg-primary/90 mono uppercase tracking-wider"
             >
               {saving ? "..." : editing ? "Mettre à jour" : "Créer"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* ── Dialog création/édition genre ── */}
+      <Dialog open={genreOpen} onOpenChange={setGenreOpen}>
+        <DialogContent className="rounded-none border-2 max-w-md">
+          <DialogHeader>
+            <DialogTitle className="mono uppercase tracking-wider text-sm flex items-center gap-2">
+              <Tag className="h-4 w-4 text-primary" />
+              // {genreEditing ? "Édition" : "Nouveau"} genre
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div>
+              <Label className="eyebrow mb-1.5 block" style={{ color: "hsl(var(--muted-foreground))" }}>Nom</Label>
+              <Input
+                value={genreForm.name}
+                onChange={(e) => {
+                  const name = e.target.value;
+                  setGenreForm((f) => ({
+                    ...f,
+                    name,
+                    slug: !f.slug || f.slug === slugify(f.name) ? slugify(name) : f.slug,
+                  }));
+                }}
+                className="rounded-none border-2 mono"
+                placeholder="Philosophie, Business, Tech…"
+              />
+            </div>
+            <div>
+              <Label className="eyebrow mb-1.5 block" style={{ color: "hsl(var(--muted-foreground))" }}>Slug</Label>
+              <Input
+                value={genreForm.slug}
+                onChange={(e) =>
+                  setGenreForm((f) => ({ ...f, slug: slugify(e.target.value) }))
+                }
+                className="rounded-none border-2 mono"
+                placeholder="auto — laisser vide"
+              />
+            </div>
+            <div>
+              <Label className="eyebrow mb-1.5 block" style={{ color: "hsl(var(--muted-foreground))" }}>Description</Label>
+              <Textarea
+                rows={2}
+                value={genreForm.description}
+                onChange={(e) => setGenreForm((f) => ({ ...f, description: e.target.value }))}
+                className="rounded-none border-2 mono text-sm"
+              />
+            </div>
+            <div className="flex items-center justify-between border-2 border-border p-3">
+              <Label className="mono text-xs uppercase tracking-wider">Actif</Label>
+              <Switch
+                checked={genreForm.is_active}
+                onCheckedChange={(v) => setGenreForm((f) => ({ ...f, is_active: v }))}
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              className="rounded-none border-2 mono uppercase tracking-wider"
+              onClick={() => setGenreOpen(false)}
+              disabled={genreSaving}
+            >
+              Annuler
+            </Button>
+            <Button
+              onClick={handleGenreSave}
+              disabled={genreSaving}
+              className="rounded-none border-2 border-primary bg-primary text-primary-foreground hover:bg-primary/90 mono uppercase tracking-wider"
+            >
+              {genreSaving ? "..." : genreEditing ? "Mettre à jour" : "Créer"}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -577,14 +848,16 @@ export default function Ebooks() {
               // Supprimer cet ebook ?
             </AlertDialogTitle>
             <AlertDialogDescription className="mono text-xs">
-              {toDelete?.name} ainsi que sa couverture et son PDF seront définitivement supprimés.
+              "{toDelete?.name}" sera supprimé définitivement (image + PDF inclus).
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel className="rounded-none border-2">Annuler</AlertDialogCancel>
+            <AlertDialogCancel className="rounded-none border-2 mono uppercase tracking-wider">
+              Annuler
+            </AlertDialogCancel>
             <AlertDialogAction
               onClick={handleDelete}
-              className="rounded-none border-2 border-destructive bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              className="rounded-none border-2 border-destructive bg-destructive text-destructive-foreground hover:bg-destructive/90 mono uppercase tracking-wider"
             >
               Supprimer
             </AlertDialogAction>
@@ -596,6 +869,39 @@ export default function Ebooks() {
 }
 
 // ── Sous-composants ──────────────────────────────────────────────────────
+
+function QuickGenreInline({ onCreate }: { onCreate: (name: string) => Promise<void> }) {
+  const [name, setName] = useState("");
+  const [loading, setLoading] = useState(false);
+  return (
+    <div className="border-2 border-dashed border-primary/40 p-3 space-y-2">
+      <p className="mono text-[11px] text-muted-foreground">
+        // Aucun genre — créez-en un en un clic (optionnel)
+      </p>
+      <div className="flex gap-2">
+        <Input
+          value={name}
+          onChange={(e) => setName(e.target.value)}
+          placeholder="Philosophie, Business…"
+          className="rounded-none border-2 mono text-xs h-9 flex-1"
+        />
+        <Button
+          size="sm"
+          disabled={!name.trim() || loading}
+          onClick={async () => {
+            setLoading(true);
+            await onCreate(name);
+            setName("");
+            setLoading(false);
+          }}
+          className="rounded-none border-2 border-primary bg-primary text-primary-foreground mono uppercase tracking-wider text-[10px] h-9"
+        >
+          <Plus className="h-3 w-3 mr-1" /> Créer
+        </Button>
+      </div>
+    </div>
+  );
+}
 
 function EbookRow({
   ebook, onEdit, onDelete, onUploadImage, onUploadPdf,
@@ -609,16 +915,11 @@ function EbookRow({
   const hasPdf = !!ebook.pdf_path;
   return (
     <div className="flex flex-col md:flex-row md:items-stretch gap-3 p-3 sm:p-4 hover:bg-muted/30 transition-colors">
-      {/* Couverture */}
       {ebook.image_path ? (
         <img
           src={imgUrl(ebook.image_path)}
           alt={ebook.name}
-          className="
-            w-full h-40 md:w-28 md:h-40
-            object-cover object-top
-            border-2 border-border shrink-0
-          "
+          className="w-full h-40 md:w-28 md:h-40 object-cover object-top border-2 border-border shrink-0"
         />
       ) : (
         <div className="w-full h-40 md:w-28 md:h-40 border-2 border-dashed border-border bg-muted flex items-center justify-center shrink-0">
@@ -626,14 +927,11 @@ function EbookRow({
         </div>
       )}
 
-      {/* Infos */}
       <div className="flex-1 min-w-0 flex flex-col gap-2">
         <div className="flex items-start gap-2">
           <p className="text-sm font-semibold leading-tight flex-1 min-w-0 break-words">
             {ebook.name}
           </p>
-
-          {/* Actions mobile : menu dropdown */}
           <div className="md:hidden shrink-0">
             <ActionsMenu
               onEdit={onEdit}
@@ -645,9 +943,9 @@ function EbookRow({
         </div>
 
         <div className="flex flex-wrap items-center gap-1.5">
-          {ebook.category_name && (
+          {ebook.ebook_category_name && (
             <span className="chip border-tertiary/40 text-tertiary bg-tertiary-soft">
-              {ebook.category_name}
+              {ebook.ebook_category_name}
             </span>
           )}
           {ebook.discount_percent != null && ebook.discount_percent > 0 && (
@@ -660,7 +958,7 @@ function EbookRow({
               "chip inline-flex items-center gap-1",
               hasPdf
                 ? "border-success/50 text-success bg-success/10"
-                : "border-destructive/50 text-destructive bg-destructive/5"
+                : "border-destructive/50 text-destructive bg-destructive/5",
             )}
           >
             <FileText className="h-3 w-3" />
@@ -674,38 +972,25 @@ function EbookRow({
             {fmtPrice(ebook.price)}
           </p>
 
-          {/* Actions desktop : boutons inline */}
           <div className="hidden md:flex items-center gap-1">
-            <Button
-              size="icon" variant="ghost"
+            <Button size="icon" variant="ghost"
               className="h-8 w-8 rounded-none hover:bg-primary hover:text-primary-foreground"
-              onClick={onUploadImage}
-              title="Changer la couverture"
-            >
+              onClick={onUploadImage} title="Changer la couverture">
               <ImageIcon className="h-3.5 w-3.5" />
             </Button>
-            <Button
-              size="icon" variant="ghost"
+            <Button size="icon" variant="ghost"
               className="h-8 w-8 rounded-none hover:bg-primary hover:text-primary-foreground"
-              onClick={onUploadPdf}
-              title="Uploader le PDF"
-            >
+              onClick={onUploadPdf} title="Uploader le PDF">
               <FileText className="h-3.5 w-3.5" />
             </Button>
-            <Button
-              size="icon" variant="ghost"
+            <Button size="icon" variant="ghost"
               className="h-8 w-8 rounded-none hover:bg-primary hover:text-primary-foreground"
-              onClick={onEdit}
-              title="Éditer"
-            >
+              onClick={onEdit} title="Éditer">
               <Pencil className="h-3.5 w-3.5" />
             </Button>
-            <Button
-              size="icon" variant="ghost"
+            <Button size="icon" variant="ghost"
               className="h-8 w-8 rounded-none hover:bg-destructive hover:text-destructive-foreground"
-              onClick={onDelete}
-              title="Supprimer"
-            >
+              onClick={onDelete} title="Supprimer">
               <Trash2 className="h-3.5 w-3.5" />
             </Button>
           </div>
@@ -726,11 +1011,8 @@ function ActionsMenu({
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
-        <Button
-          size="icon" variant="ghost"
-          className="h-9 w-9 rounded-none border-2 border-border"
-          aria-label="Actions"
-        >
+        <Button size="icon" variant="ghost"
+          className="h-9 w-9 rounded-none border-2 border-border" aria-label="Actions">
           <MoreVertical className="h-4 w-4" />
         </Button>
       </DropdownMenuTrigger>
@@ -745,10 +1027,7 @@ function ActionsMenu({
           <Upload className="h-3.5 w-3.5 mr-2" /> Uploader PDF
         </DropdownMenuItem>
         <DropdownMenuSeparator />
-        <DropdownMenuItem
-          onClick={onDelete}
-          className="text-destructive focus:text-destructive"
-        >
+        <DropdownMenuItem onClick={onDelete} className="text-destructive focus:text-destructive">
           <Trash2 className="h-3.5 w-3.5 mr-2" /> Supprimer
         </DropdownMenuItem>
       </DropdownMenuContent>
@@ -773,16 +1052,13 @@ function EmptyLibrary({ onCreate }: { onCreate: () => void }) {
         </div>
         <span className="absolute inset-0 border-2 border-primary translate-x-1.5 translate-y-1.5 -z-0" />
       </div>
-
-      <p className="eyebrow text-[10px] text-muted-foreground mb-2">
-        // bibliothèque
-      </p>
+      <p className="eyebrow text-[10px] text-muted-foreground mb-2">// bibliothèque</p>
       <h3 className="display text-2xl sm:text-3xl tracking-tight mb-2">
         Votre bibliothèque est vide
       </h3>
       <p className="mono text-xs text-muted-foreground max-w-sm mb-6">
-        Aucun ebook n'est encore publié. Ajoutez votre premier titre pour commencer
-        à le vendre — couverture, prix et PDF, c'est tout.
+        Aucun ebook n'est encore publié. Ajoutez votre premier titre — couverture,
+        prix et PDF, c'est tout.
       </p>
       <Button
         onClick={onCreate}

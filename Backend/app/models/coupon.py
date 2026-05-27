@@ -1,7 +1,7 @@
 from datetime import datetime
 
 from sqlalchemy import (
-    Boolean, Column, DateTime, Float, ForeignKey, Integer, String, Table, UniqueConstraint
+    Boolean, Column, DateTime, Float, ForeignKey, Integer, String, Table, UniqueConstraint,
 )
 from sqlalchemy.orm import relationship
 
@@ -44,7 +44,7 @@ class Coupon(Base):
     expires_at      = Column(DateTime, nullable=True)    # NULL = sans expiration
     is_active       = Column(Boolean, default=True, nullable=False)
 
-    # Réservé aux ebooks (catégorie service_type == "ebook") uniquement.
+    # Réservé aux ebooks (Product.is_ebook == True) uniquement.
     ebook_only      = Column(Boolean, default=False, nullable=False, server_default="0")
 
     created_at      = Column(DateTime, default=datetime.utcnow, nullable=False)
@@ -63,11 +63,9 @@ class Coupon(Base):
     # ── Helpers ───────────────────────────────────────────────────────────
     def applies_to_product(self, product) -> bool:
         """Vérifie qu'un produit est éligible au coupon."""
-        # Si le coupon est réservé aux ebooks, vérifier la catégorie du produit.
+        # Si le coupon est réservé aux ebooks → exiger Product.is_ebook
         if self.ebook_only:
-            if not hasattr(product, "category") or not product.category:
-                return False
-            if getattr(product.category, "service_type", None) != "ebook":
+            if not getattr(product, "is_ebook", False):
                 return False
         if not self.products and not self.categories:
             return True

@@ -275,7 +275,6 @@ export const importsApi = {
 
 export interface Ebook {
   id: number;
-  category_id: number;
   name: string;
   description: string | null;
   price: number;
@@ -284,6 +283,8 @@ export interface Ebook {
   image_path: string | null;
   image_url: string | null;
   has_pdf: boolean;
+  ebook_category_id: number | null;
+  ebook_category_name: string | null;
   required_fields?: FieldDefinition[] | null;
 }
 
