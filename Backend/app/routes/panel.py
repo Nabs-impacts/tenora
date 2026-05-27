@@ -106,7 +106,7 @@ class ProductCreate(BaseModel):
     name: str
     description: str = ""
     price: float
-    discount_percent: float = 0
+    discount_percent: float | None = None
     stock: int | None = None
     required_fields: list[dict] | None = None
     whatsapp_redirect: bool = False

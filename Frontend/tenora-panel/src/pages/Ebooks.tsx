@@ -181,7 +181,7 @@ export default function Ebooks() {
   const handleSave = async () => {
     if (!form.name.trim()) { toast.error("Titre requis"); return; }
 
-    const discount = form.discount_percent === "" ? null : Number(form.discount_percent);
+    const discount = form.discount_percent === "" ? 0 : Number(form.discount_percent);
     if (discount != null && (discount <= 0 || discount >= 100)) {
       toast.error("La réduction doit être entre 1 et 99%");
       return;
