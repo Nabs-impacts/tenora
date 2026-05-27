@@ -35,6 +35,7 @@ import {
 import { useAuth } from "@/context/AuthContext";
 import { useSite } from "@/context/SiteContext";
 import { cn } from "@/lib/utils";
+import { PaymentLogo } from "@/components/payment/PaymentLogo";
 
 /* ================================================================
  * Page Ebooks — Tenora brutalist neon
@@ -88,38 +89,44 @@ export default function Ebooks() {
     [ebooks, selectedCategory],
   );
 
-  /* ---------- Téléchargement ---------- */
+  /* ---------- Téléchargement / Lecture ---------- */
   const [selected, setSelected] = useState<Ebook | null>(null);
   const [downloading, setDownloading] = useState<number | null>(null);
 
-  async function handleDownload(eb: Ebook) {
+  /**
+   * Ouvre l'endpoint backend dans un nouvel onglet.
+   * Le backend repond 302 vers une URL presigned R2.
+   * Le navigateur suit le redirect tout seul — pas de fetch(), pas de souci CORS.
+   * Les cookies httpOnly sont envoyes automatiquement par le navigateur.
+   *
+   * mode="download" → Content-Disposition: attachment (telechargement)
+   * mode="read"     → Content-Disposition: inline     (lecture dans le navigateur)
+   */
+  function openEbookEndpoint(eb: Ebook, mode: "download" | "read") {
     if (!user) {
-      toast.error("Connectez-vous pour télécharger.");
+      toast.error("Connectez-vous pour acceder a cet ebook.");
       navigate("/connexion");
       return;
     }
     setDownloading(eb.id);
     try {
-      const res = await ebooksApi.download(eb.id);
-      if (!res.ok) {
-        const data = await res.json().catch(() => ({}));
-        toast.error(data?.detail || "Erreur lors du téléchargement.");
+      const url = ebooksApi.getDownloadUrl(eb.id, mode);
+      const win = window.open(url, "_blank", "noopener,noreferrer");
+      if (!win) {
+        toast.error("Bloque par le navigateur. Autorisez les popups pour ce site.");
         return;
       }
-      const blob = await res.blob();
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = `${eb.name}.pdf`;
-      a.click();
-      URL.revokeObjectURL(url);
-      toast.success("Téléchargement démarré !");
+      toast.success(mode === "read" ? "Ouverture du PDF..." : "Telechargement demarre !");
     } catch {
-      toast.error("Impossible de télécharger le fichier.");
+      toast.error("Impossible d'acceder au fichier.");
     } finally {
-      setDownloading(null);
+      // Court delai pour que l'utilisateur voie le feedback "..."
+      setTimeout(() => setDownloading(null), 600);
     }
   }
+
+  const handleDownload = (eb: Ebook) => openEbookEndpoint(eb, "download");
+  const handleRead = (eb: Ebook) => openEbookEndpoint(eb, "read");
 
   return (
     <div>
@@ -131,7 +138,7 @@ export default function Ebooks() {
             <span className="eyebrow inline-flex items-center gap-2 text-[10px] font-bold uppercase tracking-widest text-muted-foreground">
               <span className="text-primary">04</span>
               <span className="text-border">//</span>
-              Bibliothèque digitale
+              Bibliotheque digitale
             </span>
 
             <h1 className="font-display uppercase font-bold leading-[0.9] text-5xl md:text-8xl tracking-tight">
@@ -139,8 +146,8 @@ export default function Ebooks() {
             </h1>
 
             <p className="text-muted-foreground text-base md:text-lg max-w-2xl">
-              Dépassez vos limites. Chaque ebook est une arme pour progresser —
-              acheté une fois, gardé à vie.
+              Depassez vos limites. Chaque ebook est une arme pour progresser —
+              achete une fois, garde a vie.
             </p>
 
             <div className="flex flex-wrap gap-2 pt-1">
@@ -148,7 +155,7 @@ export default function Ebooks() {
                 <FileText size={12} /> PDF natif
               </span>
               <span className="chip bg-muted/60 text-muted-foreground border border-border">
-                <InfinityIcon size={12} /> Accès à vie
+                <InfinityIcon size={12} /> Acces a vie
               </span>
               <span className="chip bg-muted/60 text-muted-foreground border border-border">
                 <Smartphone size={12} /> Tous supports
@@ -182,7 +189,7 @@ export default function Ebooks() {
         </section>
       )}
 
-      {/* ============ GRILLE ============ */}
+      {/* ============ GRILLE — 1 / 2 / 3 cols, cards massives ============ */}
       <section className="container-app py-8 md:py-12">
         {isLoading ? (
           <EbooksGridSkeleton />
@@ -192,7 +199,7 @@ export default function Ebooks() {
             onReset={() => setSelectedCategory(null)}
           />
         ) : (
-          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3 sm:gap-4 lg:gap-5">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6">
             {filteredEbooks.map((eb) => (
               <EbookCard
                 key={eb.id}
@@ -201,6 +208,7 @@ export default function Ebooks() {
                 downloading={downloading === eb.id}
                 onOpen={() => setSelected(eb)}
                 onDownload={() => handleDownload(eb)}
+                onRead={() => handleRead(eb)}
               />
             ))}
           </div>
@@ -213,6 +221,7 @@ export default function Ebooks() {
         owned={selected ? purchasedIds.has(selected.id) : false}
         onClose={() => setSelected(null)}
         onDownload={handleDownload}
+        onRead={handleRead}
         downloading={downloading}
         paymentMethods={site?.payment_methods?.filter((p) => p.enabled) ?? []}
       />
@@ -248,18 +257,24 @@ function CategoryPill({
   );
 }
 
+/* ----------------------------------------------------------------
+ * EbookCard — version "affiche de livre" massive
+ * Image plein format 340 → 420px, prix overlay, 2 boutons si owned.
+ * -------------------------------------------------------------- */
 function EbookCard({
   ebook,
   owned,
   downloading,
   onOpen,
   onDownload,
+  onRead,
 }: {
   ebook: Ebook;
   owned: boolean;
   downloading: boolean;
   onOpen: () => void;
   onDownload: () => void;
+  onRead: () => void;
 }) {
   const cover = resolveAssetUrl(ebook.image_url || ebook.image_path);
   return (
@@ -267,77 +282,105 @@ function EbookCard({
       className="brut-card group flex flex-col overflow-hidden cursor-pointer bg-card"
       onClick={onOpen}
     >
-      {/* IMAGE — portrait, ratio livre */}
-      <div className="relative aspect-[3/4] overflow-hidden bg-muted flex-shrink-0">
+      {/* IMAGE — plein format, hauteur fixe imposante */}
+      <div className="relative w-full h-[340px] sm:h-[380px] lg:h-[420px] overflow-hidden bg-muted flex-shrink-0">
         {cover ? (
           <img
             src={cover}
             alt={ebook.name}
             loading="lazy"
-            className="size-full object-cover transition-transform duration-500 group-hover:scale-105"
+            className="w-full h-full object-cover object-top transition-transform duration-500 group-hover:scale-105"
           />
         ) : (
           <div className="size-full flex items-center justify-center text-muted-foreground/30">
-            <BookOpen className="size-16" />
+            <BookOpen className="size-24" />
           </div>
         )}
 
-        {/* Overlay prix */}
-        <div className="absolute inset-x-0 bottom-0 h-24 bg-gradient-to-t from-background/95 via-background/50 to-transparent flex items-end px-3 pb-3">
-          <span className="font-display text-lg sm:text-xl font-bold text-primary leading-none">
+        {/* Gradient overlay bas */}
+        <div className="absolute inset-x-0 bottom-0 h-32 bg-gradient-to-t from-black/90 via-black/40 to-transparent pointer-events-none" />
+
+        {/* Prix + remise sur l'image */}
+        <div className="absolute bottom-0 inset-x-0 px-4 pb-4 flex items-end justify-between">
+          <span className="font-display text-2xl font-bold text-primary drop-shadow-lg leading-none">
             {formatXOF(ebook.final_price)}
           </span>
+          {ebook.discount_percent ? (
+            <span className="chip bg-destructive text-destructive-foreground border-destructive text-xs px-2 py-1">
+              -{Math.round(ebook.discount_percent)}%
+            </span>
+          ) : null}
         </div>
 
-        {ebook.discount_percent ? (
-          <span className="absolute top-2 left-2 chip bg-destructive text-destructive-foreground border-destructive !text-[9px] !px-1.5 !py-0.5">
-            -{Math.round(ebook.discount_percent)}%
-          </span>
-        ) : null}
-
+        {/* Badge "Achete" */}
         {owned && (
-          <span className="absolute top-2 right-2 chip bg-success text-success-foreground border-success !text-[9px] !px-1.5 !py-0.5">
-            <Check className="size-2.5" /> OK
+          <span className="absolute top-3 right-3 chip bg-success text-success-foreground border-success text-[10px] px-2 py-1">
+            <Check className="size-3" /> Achete
           </span>
         )}
       </div>
 
-      {/* INFOS */}
-      <div className="p-3 flex flex-col gap-2 flex-1">
-        <h3 className="font-display font-bold text-xs sm:text-sm md:text-base leading-tight line-clamp-2 min-h-[2.4em]">
-          {ebook.name}
-        </h3>
+      {/* INFOS — section texte sous l'image */}
+      <div className="p-4 flex flex-col gap-3 flex-1">
         {ebook.ebook_category_name && (
-          <span className="text-[10px] uppercase tracking-widest text-muted-foreground font-bold truncate">
+          <span className="text-[10px] uppercase tracking-widest text-muted-foreground font-bold">
             {ebook.ebook_category_name}
           </span>
         )}
-        {owned ? (
-          <Button
-            size="sm"
-            variant="ghost"
-            className="mt-auto w-full text-success hover:bg-success/10 border border-success/30 h-7 sm:h-8 text-[10px] sm:text-xs rounded-none uppercase tracking-wider font-bold"
-            onClick={(e) => {
-              e.stopPropagation();
-              onDownload();
-            }}
-            disabled={downloading}
-          >
-            <Download className="size-3.5 mr-1" />
-            {downloading ? "..." : "Télécharger"}
-          </Button>
-        ) : (
-          <Button
-            size="sm"
-            className="mt-auto w-full bg-gradient-primary text-primary-foreground h-7 sm:h-8 text-[10px] sm:text-xs rounded-none uppercase tracking-wider font-bold"
-            onClick={(e) => {
-              e.stopPropagation();
-              onOpen();
-            }}
-          >
-            Acheter
-          </Button>
+
+        <h3 className="font-display font-bold text-base sm:text-lg md:text-xl leading-tight line-clamp-2">
+          {ebook.name}
+        </h3>
+
+        {ebook.description && (
+          <p className="text-xs sm:text-sm text-muted-foreground line-clamp-2 leading-relaxed">
+            {ebook.description}
+          </p>
         )}
+
+        {/* Boutons en bas */}
+        <div className="mt-auto flex gap-2 pt-2">
+          {owned ? (
+            <>
+              <Button
+                size="sm"
+                variant="ghost"
+                className="flex-1 text-success hover:bg-success/10 border border-success/30 h-9 text-xs rounded-none uppercase tracking-wider font-bold"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onDownload();
+                }}
+                disabled={downloading}
+              >
+                <Download className="size-3.5 mr-1" />
+                {downloading ? "..." : "Telecharger"}
+              </Button>
+              <Button
+                size="sm"
+                variant="outline"
+                className="flex-1 h-9 text-xs rounded-none uppercase tracking-wider font-bold border-2"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onRead();
+                }}
+              >
+                <BookOpen className="size-3.5 mr-1" />
+                Lire
+              </Button>
+            </>
+          ) : (
+            <Button
+              size="sm"
+              className="w-full bg-gradient-primary text-primary-foreground h-9 text-xs rounded-none uppercase tracking-wider font-bold"
+              onClick={(e) => {
+                e.stopPropagation();
+                onOpen();
+              }}
+            >
+              Apercu & Acheter
+            </Button>
+          )}
+        </div>
       </div>
     </article>
   );
@@ -345,14 +388,16 @@ function EbookCard({
 
 function EbooksGridSkeleton() {
   return (
-    <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3 md:gap-5">
-      {Array.from({ length: 10 }).map((_, i) => (
+    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6">
+      {Array.from({ length: 6 }).map((_, i) => (
         <div key={i} className="card-elev overflow-hidden">
-          <Skeleton className="aspect-[3/4] w-full rounded-none" />
-          <div className="p-3 space-y-2">
-            <Skeleton className="h-4 w-3/4 rounded-none" />
-            <Skeleton className="h-3 w-1/2 rounded-none" />
-            <Skeleton className="h-7 w-full mt-2 rounded-none" />
+          <Skeleton className="w-full h-[340px] sm:h-[380px] lg:h-[420px] rounded-none" />
+          <div className="p-4 space-y-3">
+            <Skeleton className="h-3 w-1/3 rounded-none" />
+            <Skeleton className="h-5 w-3/4 rounded-none" />
+            <Skeleton className="h-4 w-full rounded-none" />
+            <Skeleton className="h-4 w-4/5 rounded-none" />
+            <Skeleton className="h-9 w-full mt-2 rounded-none" />
           </div>
         </div>
       ))}
@@ -370,11 +415,11 @@ function EmptyLibrary({
   return (
     <div className="border-2 border-dashed border-border py-20 relative overflow-hidden">
       <div className="absolute inset-0 bg-grid opacity-[0.03]" />
-      <div className="container-app grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4 opacity-20 pointer-events-none mb-12">
-        {[0, 1, 2, 3, 4].map((i) => (
+      <div className="container-app grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6 opacity-20 pointer-events-none mb-12">
+        {[0, 1, 2].map((i) => (
           <div key={i} className="brut-card animate-pulse">
-            <div className="aspect-[3/4] bg-muted/50" />
-            <div className="p-3 space-y-2">
+            <div className="h-[340px] bg-muted/50" />
+            <div className="p-4 space-y-2">
               <div className="h-4 bg-muted/50 rounded w-3/4" />
               <div className="h-3 bg-muted/50 rounded w-1/2" />
             </div>
@@ -383,10 +428,10 @@ function EmptyLibrary({
       </div>
       <div className="relative text-center space-y-2">
         <p className="text-xs uppercase tracking-widest text-muted-foreground font-bold">
-          // bientôt disponible
+          // bientot disponible
         </p>
         <p className="font-display text-2xl md:text-3xl font-bold">
-          {selectedCategory ? "Aucun titre dans ce genre." : "Bibliothèque en construction."}
+          {selectedCategory ? "Aucun titre dans ce genre." : "Bibliotheque en construction."}
         </p>
         {selectedCategory && (
           <button
@@ -410,6 +455,7 @@ function EbookPurchaseDialog({
   owned,
   onClose,
   onDownload,
+  onRead,
   downloading,
   paymentMethods,
 }: {
@@ -417,6 +463,7 @@ function EbookPurchaseDialog({
   owned: boolean;
   onClose: () => void;
   onDownload: (e: Ebook) => void;
+  onRead: (e: Ebook) => void;
   downloading: number | null;
   paymentMethods: PaymentMethod[];
 }) {
@@ -430,6 +477,7 @@ function EbookPurchaseDialog({
   const [copied, setCopied] = useState(false);
   const [file, setFile] = useState<File | null>(null);
   const [uploading, setUploading] = useState(false);
+  const [descExpanded, setDescExpanded] = useState(false);
 
   useEffect(() => {
     if (ebook) {
@@ -438,6 +486,7 @@ function EbookPurchaseDialog({
       setError("");
       setOrderId(null);
       setFile(null);
+      setDescExpanded(false);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [ebook?.id]);
@@ -481,7 +530,7 @@ function EbookPurchaseDialog({
         payment_method: method.id,
       });
       setOrderId(res.data.id);
-      toast.success("Commande créée — joignez votre reçu.");
+      toast.success("Commande creee — joignez votre recu.");
     } catch (e: any) {
       setError(e?.response?.data?.detail || "Erreur lors de la commande.");
     } finally {
@@ -501,31 +550,57 @@ function EbookPurchaseDialog({
         )}&amount=${encodeURIComponent(formatXOF(ebook!.final_price))}`,
       );
     } catch {
-      toast.error("Erreur lors de l'envoi du reçu.");
+      toast.error("Erreur lors de l'envoi du recu.");
     } finally {
       setUploading(false);
     }
   }
 
+  const features: { label: string; Icon: typeof FileText }[] = [
+    { label: "PDF natif", Icon: FileText },
+    { label: "Acces a vie", Icon: InfinityIcon },
+    { label: "Tous appareils", Icon: Smartphone },
+  ];
+
   return (
     <Dialog open={!!ebook} onOpenChange={(o) => !o && onClose()}>
       <DialogContent className="max-w-3xl p-0 gap-0 overflow-hidden max-h-[94dvh] flex flex-col md:flex-row border-2 border-border">
-        {/* Image desktop — sticky portrait */}
+        {/* Image desktop — sticky portrait, agrandie a 260px */}
         {cover && (
-          <div className="hidden md:block w-[220px] shrink-0 self-stretch bg-muted">
-            <img src={cover} alt={ebook.name} className="w-full h-full object-cover object-top" />
+          <div className="hidden md:block w-[260px] shrink-0 self-stretch bg-muted">
+            <img
+              src={cover}
+              alt={ebook.name}
+              className="w-full h-full object-cover object-top"
+            />
           </div>
         )}
 
         <div className="flex-1 min-w-0 overflow-y-auto p-5 md:p-6 space-y-5">
-          {/* Image mobile */}
+          {/* Image mobile — affiche avec titre/prix en overlay */}
           {cover && (
-            <div className="md:hidden w-full max-h-[180px] overflow-hidden -mx-5 -mt-5 md:m-0">
-              <img src={cover} alt={ebook.name} className="w-full h-[180px] object-cover object-top" />
+            <div className="md:hidden relative w-full h-[220px] overflow-hidden -mx-5 -mt-5">
+              <img
+                src={cover}
+                alt={ebook.name}
+                className="w-full h-full object-cover object-top"
+              />
+              <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/40 to-transparent" />
+              <div className="absolute bottom-0 inset-x-0 p-4 space-y-1">
+                <p className="text-[10px] uppercase tracking-widest font-bold text-white/70">
+                  {ebook.ebook_category_name || "Ebook"}
+                </p>
+                <h2 className="font-display uppercase text-xl font-bold leading-tight text-white drop-shadow-lg line-clamp-2">
+                  {ebook.name}
+                </h2>
+                <p className="font-display text-2xl font-bold text-primary drop-shadow-lg">
+                  {formatXOF(ebook.final_price)}
+                </p>
+              </div>
             </div>
           )}
 
-          <DialogHeader className="text-left space-y-1">
+          <DialogHeader className="text-left space-y-1 hidden md:block">
             <p className="text-[10px] uppercase tracking-widest font-bold text-muted-foreground">
               {ebook.ebook_category_name || "Ebook"}
             </p>
@@ -533,12 +608,17 @@ function EbookPurchaseDialog({
               {ebook.name}
             </DialogTitle>
             <DialogDescription className="sr-only">
-              Détails et achat de l&apos;ebook
+              Details et achat de l&apos;ebook
             </DialogDescription>
           </DialogHeader>
+          {/* Title masque sur mobile (deja en overlay) mais requis pour a11y */}
+          <DialogTitle className="sr-only md:hidden">{ebook.name}</DialogTitle>
+          <DialogDescription className="sr-only md:hidden">
+            Details et achat de l&apos;ebook
+          </DialogDescription>
 
-          {/* Prix */}
-          <div className="flex items-baseline gap-3 flex-wrap">
+          {/* Prix — desktop uniquement (deja en overlay mobile) */}
+          <div className="hidden md:flex items-baseline gap-3 flex-wrap">
             <span className="font-display text-2xl md:text-3xl font-bold gradient-text">
               {formatXOF(ebook.final_price)}
             </span>
@@ -554,19 +634,44 @@ function EbookPurchaseDialog({
             ) : null}
           </div>
 
+          {/* Description — bloc visuellement distinct avec "Voir plus" */}
           {ebook.description && (
-            <p className="text-sm text-muted-foreground leading-relaxed whitespace-pre-line">
-              {ebook.description}
-            </p>
+            <>
+              <div className="border-t-2 border-border" />
+              <div className="space-y-2">
+                <p className="text-[10px] uppercase tracking-widest font-bold text-muted-foreground">
+                  // a propos
+                </p>
+                <p
+                  className={cn(
+                    "text-sm text-muted-foreground leading-relaxed whitespace-pre-line",
+                    !descExpanded && "line-clamp-4",
+                  )}
+                >
+                  {ebook.description}
+                </p>
+                {ebook.description.length > 240 && (
+                  <button
+                    onClick={() => setDescExpanded((v) => !v)}
+                    className="text-xs text-primary underline underline-offset-4 font-bold uppercase tracking-widest"
+                  >
+                    {descExpanded ? "Voir moins" : "Voir plus"}
+                  </button>
+                )}
+              </div>
+            </>
           )}
 
+          <div className="border-t-2 border-border" />
+
+          {/* Chips avec icones thematiques */}
           <div className="flex flex-wrap gap-2">
-            {["PDF natif", "Accès à vie", "Tous appareils"].map((label) => (
+            {features.map(({ label, Icon }) => (
               <span
                 key={label}
                 className="chip bg-muted/60 border-border text-muted-foreground"
               >
-                <Check className="size-2.5" /> {label}
+                <Icon className="size-3" /> {label}
               </span>
             ))}
           </div>
@@ -582,26 +687,38 @@ function EbookPurchaseDialog({
                 </div>
                 <div className="relative space-y-0.5">
                   <p className="font-display uppercase text-lg font-bold text-success">
-                    Vous possédez cet ebook
+                    Vous possedez cet ebook
                   </p>
                   <p className="text-xs text-muted-foreground">
-                    Téléchargez-le autant de fois que vous voulez.
+                    Telechargez-le ou lisez-le directement, autant de fois que vous voulez.
                   </p>
                 </div>
               </div>
-              <Button
-                onClick={() => onDownload(ebook)}
-                disabled={downloading === ebook.id}
-                className="w-full h-12 bg-success text-success-foreground hover:bg-success/90 uppercase tracking-widest font-bold text-sm rounded-none"
-              >
-                <Download className="size-4" />
-                Télécharger le PDF
-              </Button>
+
+              {/* 2 boutons : Telecharger + Lire */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                <Button
+                  onClick={() => onDownload(ebook)}
+                  disabled={downloading === ebook.id}
+                  className="w-full h-12 bg-success text-success-foreground hover:bg-success/90 uppercase tracking-widest font-bold text-sm rounded-none"
+                >
+                  <Download className="size-4 mr-1" />
+                  {downloading === ebook.id ? "..." : "Telecharger le PDF"}
+                </Button>
+                <Button
+                  onClick={() => onRead(ebook)}
+                  variant="outline"
+                  className="w-full h-12 rounded-none border-2 uppercase tracking-widest font-bold text-sm"
+                >
+                  <BookOpen className="size-4 mr-1" />
+                  Lire dans le navigateur
+                </Button>
+              </div>
             </div>
           ) : orderId ? (
             <div className="space-y-4">
               <div className="border-2 border-primary/40 bg-primary/10 px-4 py-3 text-sm flex items-center gap-2 text-primary">
-                <Check className="size-4" /> Commande #{orderId} créée
+                <Check className="size-4" /> Commande #{orderId} creee
               </div>
               {method && (
                 <InstructionsBlock
@@ -613,11 +730,11 @@ function EbookPurchaseDialog({
               )}
               <div>
                 <Label className="text-[10px] uppercase tracking-widest font-bold text-muted-foreground">
-                  Joindre votre reçu (recommandé)
+                  Joindre votre recu (recommande)
                 </Label>
                 <label className="mt-2 flex items-center justify-center gap-2 h-24 border-2 border-dashed border-border hover:border-primary/50 cursor-pointer text-sm text-muted-foreground transition bg-muted/20">
                   <Upload className="size-4" />
-                  {file ? file.name : "Glisser ou cliquer pour téléverser"}
+                  {file ? file.name : "Glisser ou cliquer pour televerser"}
                   <input
                     type="file"
                     accept="image/*"
@@ -642,7 +759,7 @@ function EbookPurchaseDialog({
                   disabled={!file || uploading}
                   onClick={uploadReceipt}
                 >
-                  {uploading ? "Envoi..." : "Envoyer le reçu"}
+                  {uploading ? "Envoi..." : "Envoyer le recu"}
                 </Button>
               </div>
             </div>
@@ -682,12 +799,12 @@ function EbookPurchaseDialog({
                         key={pm.id}
                         onClick={() => setMethod(pm)}
                         className={cn(
-                          "brut-card p-3 text-left text-sm transition",
+                          "brut-card p-3 text-left transition relative flex flex-col items-center gap-2",
                           method?.id === pm.id && "border-primary bg-primary/10",
                         )}
                       >
-                        <span className="text-lg">{pm.icon}</span>
-                        <p className="font-bold text-[11px] mt-1 uppercase tracking-wider">
+                        <PaymentLogo methodId={pm.id} name={pm.name} variant="tile" />
+                        <p className="font-bold text-[11px] uppercase tracking-wider text-center">
                           {pm.name}
                         </p>
                         {method?.id === pm.id && (
@@ -719,8 +836,8 @@ function EbookPurchaseDialog({
                 disabled={loading || !method}
                 onClick={submit}
               >
-                <ShoppingBag className="size-4" />
-                {loading ? "Création..." : `Acheter — ${formatXOF(ebook.final_price)}`}
+                <ShoppingBag className="size-4 mr-1" />
+                {loading ? "Creation..." : `Acheter — ${formatXOF(ebook.final_price)}`}
               </Button>
               {!method && (
                 <p className="text-xs text-center text-muted-foreground">
@@ -750,14 +867,14 @@ function InstructionsBlock({
     <div className="border-2 border-border bg-muted/30 p-4 space-y-2">
       <div className="flex items-center justify-between">
         <span className="text-xs font-bold uppercase tracking-widest text-foreground inline-flex items-center gap-2">
-          <span className="text-base leading-none">{method.icon}</span>
+          <PaymentLogo methodId={method.id} name={method.name} variant="badge" />
           {method.name}
         </span>
         <button
           onClick={onCopy}
           className="text-[10px] px-2 py-1 bg-background border-2 border-border hover:border-primary/50 inline-flex items-center gap-1.5 uppercase tracking-widest font-bold rounded-none"
         >
-          <Copy className="size-3" /> {copied ? "Copié" : "Copier"}
+          <Copy className="size-3" /> {copied ? "Copie" : "Copier"}
         </button>
       </div>
       <pre className="whitespace-pre-wrap text-xs text-muted-foreground font-mono">

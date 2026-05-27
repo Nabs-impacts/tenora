@@ -4,12 +4,16 @@ app/services/storage_service.py
 Couche d'abstraction stockage : Cloudflare R2 en production, disque local en dev.
 
 Usage :
-    from app.services.storage_service import upload_file, delete_file, get_display_url, get_presigned_url
+    from app.services.storage_service import (
+        upload_file, delete_file, get_display_url, get_presigned_url,
+    )
 
 - upload_file()       → retourne l'URL complète (R2) ou le chemin relatif (local)
 - delete_file()       → supprime depuis R2 ou le disque selon l'env
 - get_display_url()   → convertit n'importe quel format en URL affichable dans <img>
 - get_presigned_url() → URL pré-signée temporaire pour téléchargement sécurisé (ebooks PDF)
+                        Supporte response_content_disposition / response_content_type
+                        pour forcer le comportement du navigateur (download vs inline).
 """
 
 import uuid
@@ -77,7 +81,7 @@ def upload_file(file_data: bytes, extension: str, subfolder: str) -> str:
         path.mkdir(parents=True, exist_ok=True)
         (path / filename).write_bytes(file_data)
         logger.debug(f"[Storage-local] upload → {key}")
-        return key  # chemin relatif
+        return key
 
     try:
         client = _get_r2_client()
@@ -89,22 +93,17 @@ def upload_file(file_data: bytes, extension: str, subfolder: str) -> str:
         )
         url = f"{settings.R2_PUBLIC_URL.rstrip('/')}/{key}"
         logger.debug(f"[Storage-R2] upload → {url}")
-        return url  # URL complète
+        return url
     except Exception as e:
         logger.error(f"[Storage-R2] échec upload | key={key} | {e}")
         raise
 
 
 def delete_file(path_or_url: str | None) -> None:
-    """
-    Supprime un fichier depuis R2 ou le disque local.
-    Accepte aussi bien un chemin relatif ("products/x.jpg") qu'une URL complète.
-    """
     if not path_or_url:
         return
 
     if not USE_R2:
-        # Ignorer les URLs distantes en dev (ne devrait pas arriver)
         if path_or_url.startswith("http"):
             return
         full = Path(settings.UPLOAD_FOLDER) / path_or_url
@@ -116,7 +115,6 @@ def delete_file(path_or_url: str | None) -> None:
             logger.warning(f"[Storage-local] impossible de supprimer {full} | {e}")
         return
 
-    # R2 : extraire la clé depuis l'URL ou utiliser le chemin tel quel
     key = path_or_url
     if path_or_url.startswith("http"):
         base = settings.R2_PUBLIC_URL.rstrip("/")
@@ -130,11 +128,6 @@ def delete_file(path_or_url: str | None) -> None:
 
 
 def get_display_url(path_or_url: str | None, base_url: str = "") -> str | None:
-    """
-    Convertit n'importe quel format stocké en URL affichable pour les balises <img>.
-    - URL complète R2  → retournée telle quelle
-    - Chemin relatif   → préfixé par base_url + /uploads/
-    """
     if not path_or_url:
         return None
     if path_or_url.startswith("http"):
@@ -142,11 +135,20 @@ def get_display_url(path_or_url: str | None, base_url: str = "") -> str | None:
     return f"{base_url}/uploads/{path_or_url}"
 
 
-def get_presigned_url(path_or_url: str, expires_in: int = 3600) -> str | None:
+def get_presigned_url(
+    path_or_url: str,
+    expires_in: int = 3600,
+    response_content_disposition: str | None = None,
+    response_content_type: str | None = None,
+) -> str | None:
     """
     Génère une URL pré-signée pour téléchargement sécurisé (ebooks PDF).
-    Expire après `expires_in` secondes (défaut : 1 heure).
-    Retourne None si le storage local est utilisé (le caller gère le fallback FileResponse).
+
+    - `expires_in`                    : durée de validité (s), défaut 1 h.
+    - `response_content_disposition`  : ex. 'attachment; filename="x.pdf"' ou 'inline; filename="x.pdf"'.
+    - `response_content_type`         : ex. 'application/pdf'.
+
+    Retourne None si le storage local est utilisé (caller gère le fallback FileResponse).
     """
     if not USE_R2:
         return None
@@ -156,13 +158,22 @@ def get_presigned_url(path_or_url: str, expires_in: int = 3600) -> str | None:
         base = settings.R2_PUBLIC_URL.rstrip("/")
         key  = path_or_url[len(base):].lstrip("/")
 
+    params: dict = {"Bucket": settings.R2_BUCKET_NAME, "Key": key}
+    if response_content_disposition:
+        params["ResponseContentDisposition"] = response_content_disposition
+    if response_content_type:
+        params["ResponseContentType"] = response_content_type
+
     try:
         url = _get_r2_client().generate_presigned_url(
             "get_object",
-            Params={"Bucket": settings.R2_BUCKET_NAME, "Key": key},
+            Params=params,
             ExpiresIn=expires_in,
         )
-        logger.debug(f"[Storage-R2] presigned URL générée | key={key} | expires_in={expires_in}s")
+        logger.debug(
+            f"[Storage-R2] presigned URL générée | key={key} | "
+            f"expires_in={expires_in}s | disposition={response_content_disposition}"
+        )
         return url
     except Exception as e:
         logger.error(f"[Storage-R2] échec presigned URL | key={key} | {e}")
