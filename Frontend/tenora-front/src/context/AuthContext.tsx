@@ -8,7 +8,7 @@ import {
   ReactNode,
 } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { authApi, setApiErrorHandler, type User } from "@/lib/api";
+import { authApi, setApiErrorHandler, setSessionToken, type User } from "@/lib/api";
 
 export const AUTH_QUERY_KEY = ["auth", "me"] as const;
 
@@ -42,6 +42,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     queryFn: async () => {
       try {
         const res = await authApi.me();
+        setSessionToken(res.data?.access_token);
         return res.data;
       } catch {
         return null;
@@ -58,6 +59,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     setApiErrorHandler(() => {
+      setSessionToken(null);
       qc.setQueryData(AUTH_QUERY_KEY, null);
     });
   }, [qc]);
@@ -81,6 +83,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         try {
           const res = await authApi.login({ email, password });
           if (res.data) {
+            setSessionToken(res.data.access_token);
             setUser(res.data);
           } else {
             await refetch();
@@ -93,8 +96,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       async register(email, password, phone, username) {
         setLoading(true);
         try {
-          await authApi.register({ email, password, phone, username });
-          await refetch();
+          const res = await authApi.register({ email, password, phone, username });
+          setSessionToken(res.data?.access_token);
+          setUser(res.data);
         } finally {
           setLoading(false);
         }
@@ -102,6 +106,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
       async logout() {
         await authApi.logout();
+        setSessionToken(null);
         setUser(null);
         qc.removeQueries({ queryKey: ["orders"] });
         qc.removeQueries({ queryKey: ["imports"] });

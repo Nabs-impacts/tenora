@@ -33,7 +33,7 @@ const queryClient = new QueryClient({
 const App = () => (
   <QueryClientProvider client={queryClient}>
     <TooltipProvider>
-      <Sonner theme="dark" position="top-right" toastOptions={{ className: "mono" }} />
+      <Sonner theme="dark" position="top-right" duration={4200} />
       <BrowserRouter>
         <Routes>
           <Route path="/login" element={<Login />} />

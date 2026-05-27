@@ -205,26 +205,17 @@ export default function Ebooks() {
       let targetId: number;
       let imagePath: string | undefined = editing?.image_path;
       let pdfPath: string | undefined = editing?.pdf_path;
+      const imageToUpload = pendingImage;
+      const pdfToUpload = pendingPdf;
 
       if (editing) {
         await updateEbook(editing.id, payload);
         targetId = editing.id;
-        toast.success("Ebook mis à jour");
       } else {
         const { data } = await createEbook(payload);
         targetId = data?.id;
-        toast.success("Ebook créé");
       }
-
-      if (pendingImage && targetId) {
-        const { data } = await uploadEbookImage(targetId, pendingImage);
-        if (data?.image_path) imagePath = data.image_path;
-      }
-      if (pendingPdf && targetId) {
-        const { data } = await uploadEbookPdf(targetId, pendingPdf);
-        if (data?.pdf_path) pdfPath = data.pdf_path;
-        toast.success("PDF uploadé");
-      }
+      if (!targetId) throw new Error("ID ebook introuvable après création.");
 
       // Mise à jour locale — pas de rechargement réseau
       const catId = form.ebook_category_id ? Number(form.ebook_category_id) : null;
@@ -253,9 +244,50 @@ export default function Ebooks() {
       }
 
       setShowForm(false);
+      setPendingImage(null);
+      setImagePreview(null);
+      setPendingPdf(null);
+      setSaving(false);
+
+      if (!imageToUpload && !pdfToUpload) {
+        toast.success(editing ? "Ebook mis à jour" : "Ebook créé");
+        return;
+      }
+
+      toast.success(
+        editing
+          ? "Ebook enregistré — upload en arrière-plan"
+          : "Ebook créé — upload en arrière-plan",
+      );
+
+      void (async () => {
+        try {
+          let uploadedImagePath = imagePath;
+          let uploadedPdfPath = pdfPath;
+
+          if (imageToUpload) {
+            const { data } = await uploadEbookImage(targetId, imageToUpload);
+            if (data?.image_path) uploadedImagePath = data.image_path;
+          }
+          if (pdfToUpload) {
+            const { data } = await uploadEbookPdf(targetId, pdfToUpload);
+            if (data?.pdf_path) uploadedPdfPath = data.pdf_path;
+          }
+
+          setEbooks((prev) =>
+            prev.map((e) =>
+              e.id === targetId
+                ? { ...e, image_path: uploadedImagePath, pdf_path: uploadedPdfPath }
+                : e,
+            ),
+          );
+          toast.success("Fichiers ebook uploadés");
+        } catch (uploadErr: any) {
+          toast.error(uploadErr?.response?.data?.detail || "Upload des fichiers échoué");
+        }
+      })();
     } catch (err: any) {
       toast.error(err?.response?.data?.detail || "Erreur lors de la sauvegarde");
-    } finally {
       setSaving(false);
     }
   };
@@ -485,7 +517,7 @@ export default function Ebooks() {
 
       {/* ── Zone 1 — Genres / Catégories ebooks ── */}
       <DataCard>
-        <DataCardHeader>
+        <DataCardHeader className="items-start gap-4 p-4 sm:p-5">
           <div className="flex items-center gap-2 min-w-0">
             <Tag className="h-4 w-4 text-primary shrink-0" />
             <span className="eyebrow text-[10px] text-muted-foreground">
@@ -501,19 +533,19 @@ export default function Ebooks() {
             <Plus className="h-3 w-3 mr-1.5" /> Nouveau genre
           </Button>
         </DataCardHeader>
-        <DataCardContent>
+        <DataCardContent className="p-4 sm:p-5">
           {cats.length === 0 ? (
-            <p className="text-xs mono text-muted-foreground py-3">
+            <p className="text-xs mono text-muted-foreground py-4 leading-relaxed">
               // Aucun genre pour l'instant — créez-en un pour organiser votre bibliothèque
               (totalement optionnel).
             </p>
           ) : (
-            <div className="flex flex-wrap gap-2 py-2">
+            <div className="flex flex-wrap gap-3">
               {cats.map((c) => (
                 <div
                   key={c.id}
                   className={cn(
-                    "inline-flex items-center gap-1.5 border-2 px-2 py-1 mono text-[11px] uppercase tracking-wider",
+                    "inline-flex min-h-10 items-center gap-2 border-2 px-3 py-2 mono text-[11px] uppercase tracking-wider shadow-[3px_3px_0_0_hsl(var(--border))] transition-colors",
                     c.is_active
                       ? "border-primary/40 bg-primary/5 text-foreground"
                       : "border-border bg-muted text-muted-foreground",
@@ -534,21 +566,21 @@ export default function Ebooks() {
                   )}
                   <button
                     onClick={() => handleGenreToggle(c)}
-                    className="opacity-60 hover:opacity-100"
+                    className="flex items-center opacity-70 hover:opacity-100"
                     title={c.is_active ? "Désactiver" : "Activer"}
                   >
-                    <Switch checked={c.is_active} className="scale-50 -my-2" />
+                    <Switch checked={c.is_active} className="scale-75" />
                   </button>
                   <button
                     onClick={() => openGenreEdit(c)}
-                    className="text-muted-foreground hover:text-primary"
+                    className="flex h-7 w-7 items-center justify-center border border-border/70 text-muted-foreground hover:border-primary hover:text-primary"
                     title="Éditer"
                   >
                     <Pencil className="h-3 w-3" />
                   </button>
                   <button
                     onClick={() => handleGenreDelete(c)}
-                    className="text-muted-foreground hover:text-destructive"
+                    className="flex h-7 w-7 items-center justify-center border border-border/70 text-muted-foreground hover:border-destructive hover:text-destructive"
                     title="Supprimer"
                   >
                     <Trash2 className="h-3 w-3" />

@@ -13,6 +13,24 @@ const api = axios.create({
   timeout: 15000,
 });
 
+const SESSION_TOKEN_KEY = "tenora_session_token";
+
+export function setSessionToken(token?: string | null) {
+  if (typeof window === "undefined") return;
+  if (token) localStorage.setItem(SESSION_TOKEN_KEY, token);
+  else localStorage.removeItem(SESSION_TOKEN_KEY);
+}
+
+api.interceptors.request.use((config) => {
+  if (typeof window !== "undefined") {
+    const token = localStorage.getItem(SESSION_TOKEN_KEY);
+    if (token && !config.headers.Authorization) {
+      config.headers.Authorization = `Bearer ${token}`;
+    }
+  }
+  return config;
+});
+
 let _onUnauthorized: (() => void) | null = null;
 export function setApiErrorHandler(onUnauthorized: () => void) {
   _onUnauthorized = onUnauthorized;
@@ -73,6 +91,7 @@ api.interceptors.response.use(
         url.includes("/auth/register");
       if (!isAuthEndpoint) _onUnauthorized?.();
       if (!isAuthEndpoint && current !== "/connexion" && current !== "/inscription") {
+        setSessionToken(null);
         window.location.href = `/connexion?redirect=${encodeURIComponent(current)}`;
       }
       return Promise.reject(error);
@@ -107,6 +126,7 @@ export interface User {
   is_verified: boolean;
   is_admin: boolean;
   created_at: string;
+  access_token?: string;
 }
 export interface Category {
   id: number;

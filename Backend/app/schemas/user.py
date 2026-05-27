@@ -66,6 +66,10 @@ class UserResponse(BaseModel):
     model_config = {"from_attributes": True}
 
 
+class UserSessionResponse(UserResponse):
+    access_token: str
+
+
 class UserUpdate(BaseModel):
     phone: str | None = None
     # Acceptation conditionnelle : la route refusera la mise à jour si déjà défini.

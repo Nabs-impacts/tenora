@@ -13,10 +13,18 @@ const Toaster = ({ ...props }: ToasterProps) => {
       toastOptions={{
         classNames: {
           toast:
-            "group toast group-[.toaster]:bg-background group-[.toaster]:text-foreground group-[.toaster]:border-border group-[.toaster]:shadow-lg",
-          description: "group-[.toast]:text-muted-foreground",
-          actionButton: "group-[.toast]:bg-primary group-[.toast]:text-primary-foreground",
-          cancelButton: "group-[.toast]:bg-muted group-[.toast]:text-muted-foreground",
+            "group toast overflow-hidden rounded-none border-2 bg-background text-foreground shadow-[6px_6px_0_0_hsl(var(--border))] before:absolute before:left-0 before:top-0 before:h-full before:w-1.5 before:bg-primary [&_[data-title]]:font-bold [&_[data-title]]:uppercase [&_[data-title]]:tracking-[0.12em] [&_[data-title]]:text-[12px]",
+          success:
+            "border-primary before:bg-primary shadow-[6px_6px_0_0_hsl(var(--primary)/0.55)] [&_[data-icon]]:text-primary [&_[data-title]]:text-primary",
+          error:
+            "border-secondary before:bg-secondary shadow-[6px_6px_0_0_hsl(var(--secondary)/0.45)] [&_[data-icon]]:text-secondary [&_[data-title]]:text-secondary",
+          warning:
+            "border-warning before:bg-warning shadow-[6px_6px_0_0_hsl(var(--warning)/0.45)] [&_[data-icon]]:text-warning [&_[data-title]]:text-warning",
+          info:
+            "border-accent before:bg-accent shadow-[6px_6px_0_0_hsl(var(--accent)/0.4)] [&_[data-icon]]:text-accent [&_[data-title]]:text-accent",
+          description: "text-muted-foreground text-[12px] leading-relaxed",
+          actionButton: "rounded-none border border-primary bg-primary text-primary-foreground font-bold uppercase tracking-wider",
+          cancelButton: "rounded-none border border-border bg-muted text-muted-foreground font-bold uppercase tracking-wider",
         },
       }}
       {...props}

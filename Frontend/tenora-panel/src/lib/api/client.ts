@@ -11,9 +11,23 @@ const api = axios.create({
   timeout: 15000,
 });
 
+const SESSION_TOKEN_KEY = "tenora_panel_session_token";
+
+export function setPanelSessionToken(token?: string | null) {
+  if (typeof window === "undefined") return;
+  if (token) localStorage.setItem(SESSION_TOKEN_KEY, token);
+  else localStorage.removeItem(SESSION_TOKEN_KEY);
+}
+
 // ── Timeouts différenciés ─────────────────────────────────────────────────────
 api.interceptors.request.use((config) => {
   const url = config.url || "";
+  if (typeof window !== "undefined") {
+    const token = localStorage.getItem(SESSION_TOKEN_KEY);
+    if (token && !config.headers.Authorization) {
+      config.headers.Authorization = `Bearer ${token}`;
+    }
+  }
   if (url.includes("/auth/me") || url.includes("/site/init")) {
     config.timeout = 5000;
   }
@@ -50,6 +64,7 @@ api.interceptors.response.use(
       const onLogin = typeof window !== "undefined" && window.location.pathname === "/login";
       if (!isMe && !onLogin && typeof window !== "undefined") {
         localStorage.removeItem("panel_session");
+        setPanelSessionToken(null);
         window.location.href = "/login";
       }
       return Promise.reject(error);

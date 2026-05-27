@@ -10,11 +10,11 @@ from sqlalchemy.orm import Session
 
 from app.config import settings
 from app.database import get_db
-from app.dependencies import get_current_user
+from app.dependencies import get_current_user, _session_id_from_request
 from app.models.otp import OTPCode
 from app.models.session import Session as SessionModel
 from app.models.user import User
-from app.schemas.user import UserLogin, UserRegister, UserResponse, UserUpdate
+from app.schemas.user import UserLogin, UserRegister, UserResponse, UserSessionResponse, UserUpdate
 from app.services.mail_service import send_otp_email
 from app.services.rate_limiter import limiter
 
@@ -58,9 +58,34 @@ def _username_taken(db: Session, username: str) -> bool:
     ).first() is not None
 
 
+def _set_session_cookie(response: Response, session_id: str, max_age: int) -> None:
+    response.set_cookie(
+        key="session_id",
+        value=session_id,
+        httponly=True,
+        secure=not is_dev,
+        samesite="lax" if is_dev else "none",
+        max_age=max_age,
+        path="/",
+    )
+
+
+def _user_session_payload(user: User, session_id: str) -> dict:
+    return {
+        "id": user.id,
+        "email": user.email,
+        "phone": user.phone,
+        "username": user.username,
+        "is_verified": user.is_verified,
+        "is_admin": user.is_admin,
+        "created_at": user.created_at,
+        "access_token": session_id,
+    }
+
+
 # ── Register ──────────────────────────────────────────────────────────────────
 
-@router.post("/register", response_model=UserResponse)
+@router.post("/register", response_model=UserSessionResponse)
 @limiter.limit("5/minute")
 def register(data: UserRegister, response: Response, request: Request, db: Session = Depends(get_db)):
     logger.info(f"Tentative d'inscription | email={data.email} | ip={request.client.host}")
@@ -101,22 +126,15 @@ def register(data: UserRegister, response: Response, request: Request, db: Sessi
     db.add(session)
     db.commit()
 
-    response.set_cookie(
-        key      = "session_id",
-        value    = session_id,
-        httponly = True,
-        secure   = not is_dev,                      # False en dev (HTTP), True en prod (HTTPS)
-        samesite = "lax" if is_dev else "none",
-        max_age  = cookie_max_age,
-    )
+    _set_session_cookie(response, session_id, cookie_max_age)
 
     logger.success(f"Inscription réussie + session créée | email={data.email} | id={user.id}")
-    return user
+    return _user_session_payload(user, session_id)
 
 
 # ── Login ─────────────────────────────────────────────────────────────────────
 
-@router.post("/login")
+@router.post("/login", response_model=UserSessionResponse)
 @limiter.limit("10/minute")
 def login(data: UserLogin, response: Response, request: Request, db: Session = Depends(get_db)):
     logger.info(f"Tentative de connexion | email={data.email} | ip={request.client.host}")
@@ -132,8 +150,8 @@ def login(data: UserLogin, response: Response, request: Request, db: Session = D
         pass
 
     if user.is_admin:
-        session_duration = timedelta(hours=12)
-        cookie_max_age   = 12 * 60 * 60
+        session_duration = timedelta(days=7)
+        cookie_max_age   = 7 * 24 * 60 * 60
     else:
         session_duration = timedelta(days=7)
         cookie_max_age   = 7 * 24 * 60 * 60
@@ -147,24 +165,17 @@ def login(data: UserLogin, response: Response, request: Request, db: Session = D
     db.add(session)
     db.commit()
 
-    response.set_cookie(
-        key      = "session_id",
-        value    = session_id,
-        httponly = True,
-        secure   = not is_dev,                      # False en dev (HTTP), True en prod (HTTPS)
-        samesite = "lax" if is_dev else "none",
-        max_age  = cookie_max_age,
-    )
+    _set_session_cookie(response, session_id, cookie_max_age)
 
     logger.success(f"Connexion réussie | email={data.email} | id={user.id}")
-    return user
+    return _user_session_payload(user, session_id)
 
 
 # ── Logout ────────────────────────────────────────────────────────────────────
 
 @router.post("/logout")
 def logout(request: Request, response: Response, db: Session = Depends(get_db)):
-    session_id = request.cookies.get("session_id")
+    session_id = _session_id_from_request(request)
     if session_id:
         session = db.query(SessionModel).filter(SessionModel.id == session_id).first()
         if session:
@@ -179,15 +190,16 @@ def logout(request: Request, response: Response, db: Session = Depends(get_db)):
         secure   = not is_dev,                      # Doit correspondre aux flags du set_cookie
         samesite = "lax" if is_dev else "none",
         httponly = True,
+        path     = "/",
     )
     return {"message": "Déconnecté"}
 
 
 # ── Me ────────────────────────────────────────────────────────────────────────
 
-@router.get("/me", response_model=UserResponse)
-def me(request: Request, db: Session = Depends(get_db)):
-    session_id = request.cookies.get("session_id")
+@router.get("/me", response_model=UserSessionResponse)
+def me(request: Request, response: Response, db: Session = Depends(get_db)):
+    session_id = _session_id_from_request(request)
     if not session_id:
         raise HTTPException(status_code=401, detail="Non connecté.")
 
@@ -205,8 +217,13 @@ def me(request: Request, db: Session = Depends(get_db)):
         db.commit()
         raise HTTPException(status_code=401, detail="Compte introuvable. Veuillez vous reconnecter.")
 
+    cookie_max_age = 7 * 24 * 60 * 60
+    session.expires_at = datetime.utcnow() + timedelta(seconds=cookie_max_age)
+    db.commit()
+    _set_session_cookie(response, session_id, cookie_max_age)
+
     logger.info(f"Accès /me | user_id={user.id} | email={user.email}")
-    return user
+    return _user_session_payload(user, session_id)
 
 
 # ── Verify email ──────────────────────────────────────────────────────────────

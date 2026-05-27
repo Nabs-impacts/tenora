@@ -1,11 +1,12 @@
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
-import api from "@/lib/api/client";
+import api, { setPanelSessionToken } from "@/lib/api/client";
 
 interface User {
   id: number;
   email: string;
   is_admin: boolean;
+  access_token?: string;
 }
 
 interface AuthState {
@@ -33,8 +34,10 @@ export const useAuthStore = create<AuthState>()(
         const { data: me } = await api.post("/auth/login", { email, password });
         if (!me?.is_admin) {
           await api.post("/auth/logout").catch(() => {});
+          setPanelSessionToken(null);
           throw new Error("Acces reserve aux administrateurs.");
         }
+        setPanelSessionToken(me.access_token);
         set({ user: me, sessionActive: true, isLoggedIn: true, ready: true });
       },
 
@@ -46,8 +49,10 @@ export const useAuthStore = create<AuthState>()(
             set({ ready: true });
             return;
           }
+          setPanelSessionToken(data.access_token);
           set({ user: data, sessionActive: true, isLoggedIn: true, ready: true });
         } catch {
+          setPanelSessionToken(null);
           set({ sessionActive: false, isLoggedIn: false, user: null, ready: true });
         }
       },
@@ -58,6 +63,7 @@ export const useAuthStore = create<AuthState>()(
         } catch {
           // ignore
         }
+        setPanelSessionToken(null);
         set({ user: null, sessionActive: false, isLoggedIn: false });
       },
     }),

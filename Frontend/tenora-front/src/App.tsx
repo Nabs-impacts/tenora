@@ -54,7 +54,7 @@ const App = () => (
       <BrowserRouter>
         <AuthProvider>
           <SiteProvider>
-            <Sonner position="top-center" richColors closeButton />
+            <Sonner position="top-center" closeButton duration={4200} />
             <MaintenanceGate>
               <Routes>
                 <Route element={<AppLayout />}>

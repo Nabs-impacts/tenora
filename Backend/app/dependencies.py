@@ -10,7 +10,7 @@ from app.models.user import User
 
 
 USER_SESSION_TTL_DAYS = 7
-ADMIN_SESSION_TTL_HOURS = 12
+ADMIN_SESSION_TTL_HOURS = 24 * 7
 
 
 def _session_id_from_request(request: Request) -> str | None:
@@ -37,7 +37,6 @@ def get_current_user(
     session_id = _session_id_from_request(request)
 
     if not session_id:
-        logger.warning(f"Accès non autorisé | pas de cookie | ip={request.client.host} | route={request.url.path}")
         raise HTTPException(status_code=401, detail="Non connecté")
 
     session = db.query(SessionModel).filter(
@@ -46,7 +45,6 @@ def get_current_user(
     ).first()
 
     if not session:
-        logger.warning(f"Accès non autorisé | session invalide ou expirée | ip={request.client.host} | route={request.url.path}")
         raise HTTPException(status_code=401, detail="Session expirée")
 
     user = db.query(User).filter(User.id == session.user_id).first()
@@ -70,7 +68,6 @@ def get_admin_user(
     session_id = _session_id_from_request(request)
 
     if not session_id:
-        logger.warning(f"Accès admin non autorisé | pas de cookie | ip={request.client.host} | route={request.url.path}")
         raise HTTPException(status_code=401, detail="Non connecté")
 
     session = db.query(SessionModel).filter(
@@ -79,7 +76,6 @@ def get_admin_user(
     ).first()
 
     if not session:
-        logger.warning(f"Accès admin non autorisé | session invalide ou expirée | ip={request.client.host} | route={request.url.path}")
         raise HTTPException(status_code=401, detail="Session expirée")
 
     user = db.query(User).filter(User.id == session.user_id).first()
