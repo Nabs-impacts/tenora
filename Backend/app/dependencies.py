@@ -13,11 +13,28 @@ USER_SESSION_TTL_DAYS = 7
 ADMIN_SESSION_TTL_HOURS = 12
 
 
+def _session_id_from_request(request: Request) -> str | None:
+    session_id = request.cookies.get("session_id")
+    if session_id:
+        return session_id
+
+    token = request.query_params.get("access_token")
+    if token:
+        return token
+
+    authorization = request.headers.get("Authorization", "")
+    scheme, _, value = authorization.partition(" ")
+    if scheme.lower() == "bearer" and value.strip():
+        return value.strip()
+
+    return None
+
+
 def get_current_user(
     request: Request,
     db: Session = Depends(get_db)
 ) -> User:
-    session_id = request.cookies.get("session_id")
+    session_id = _session_id_from_request(request)
 
     if not session_id:
         logger.warning(f"Accès non autorisé | pas de cookie | ip={request.client.host} | route={request.url.path}")
@@ -50,7 +67,7 @@ def get_admin_user(
     l'admin doit se reconnecter complètement (logout total).
     La durée elle-même est appliquée au moment du login dans routes/auth.py.
     """
-    session_id = request.cookies.get("session_id")
+    session_id = _session_id_from_request(request)
 
     if not session_id:
         logger.warning(f"Accès admin non autorisé | pas de cookie | ip={request.client.host} | route={request.url.path}")

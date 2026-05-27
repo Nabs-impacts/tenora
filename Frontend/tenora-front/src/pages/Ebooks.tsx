@@ -93,16 +93,7 @@ export default function Ebooks() {
   const [selected, setSelected] = useState<Ebook | null>(null);
   const [downloading, setDownloading] = useState<number | null>(null);
 
-  /**
-   * Ouvre l'endpoint backend dans un nouvel onglet.
-   * Le backend repond 302 vers une URL presigned R2.
-   * Le navigateur suit le redirect tout seul — pas de fetch(), pas de souci CORS.
-   * Les cookies httpOnly sont envoyes automatiquement par le navigateur.
-   *
-   * mode="download" → Content-Disposition: attachment (telechargement)
-   * mode="read"     → Content-Disposition: inline     (lecture dans le navigateur)
-   */
-  function openEbookEndpoint(eb: Ebook, mode: "download" | "read") {
+  async function openEbookEndpoint(eb: Ebook, mode: "download" | "read") {
     if (!user) {
       toast.error("Connectez-vous pour acceder a cet ebook.");
       navigate("/connexion");
@@ -110,17 +101,26 @@ export default function Ebooks() {
     }
     setDownloading(eb.id);
     try {
-      const url = ebooksApi.getDownloadUrl(eb.id, mode);
-      const win = window.open(url, "_blank", "noopener,noreferrer");
-      if (!win) {
-        toast.error("Bloque par le navigateur. Autorisez les popups pour ce site.");
-        return;
+      const { data } = await ebooksApi.getPresignedUrl(eb.id, mode);
+      if (!data.url) throw new Error("URL ebook manquante");
+
+      if (mode === "read") {
+        window.location.assign(data.url);
+      } else {
+        const link = document.createElement("a");
+        link.href = data.url;
+        link.download = data.filename || `${eb.name}.pdf`;
+        link.rel = "noopener noreferrer";
+        link.style.display = "none";
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
       }
       toast.success(mode === "read" ? "Ouverture du PDF..." : "Telechargement demarre !");
-    } catch {
-      toast.error("Impossible d'acceder au fichier.");
+    } catch (error: any) {
+      const message = error?.response?.data?.detail || "Impossible d'acceder au fichier.";
+      toast.error(message);
     } finally {
-      // Court delai pour que l'utilisateur voie le feedback "..."
       setTimeout(() => setDownloading(null), 600);
     }
   }

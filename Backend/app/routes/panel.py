@@ -946,12 +946,30 @@ def delete_ebook(
     ).first()
     if not p:
         raise HTTPException(status_code=404, detail="Ebook introuvable.")
+
+    linked_orders = db.query(func.count(Order.id)).filter(Order.product_id == ebook_id).scalar() or 0
     storage_delete(p.image_path)
     storage_delete(p.pdf_path)
+
+    if linked_orders > 0:
+        p.is_active = False
+        p.is_ebook = False
+        p.image_path = None
+        p.pdf_path = None
+        p.name = f"[SUPPRIMÉ] {p.name}" if not p.name.startswith("[SUPPRIMÉ]") else p.name
+        db.commit()
+        logger.info(
+            f"Ebook archivé | id={ebook_id} | commandes_liées={linked_orders} | admin_id={admin.id}"
+        )
+        return {
+            "message": "Ebook supprimé de la boutique. L'historique des commandes a été conservé.",
+            "archived": True,
+        }
+
     db.delete(p)
     db.commit()
     logger.info(f"Ebook supprimé | id={ebook_id} | admin_id={admin.id}")
-    return {"message": "Ebook supprimé."}
+    return {"message": "Ebook supprimé.", "archived": False}
 
 
 @router.post("/ebooks/{ebook_id}/image")

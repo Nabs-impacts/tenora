@@ -5,6 +5,7 @@ Routes e-books publiques — app/routes/ebooks.py
     app.include_router(ebooks_router, prefix="/ebooks", tags=["Ebooks"])
 """
 from pathlib import Path
+from urllib.parse import urlencode
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from fastapi.responses import FileResponse, RedirectResponse
@@ -163,6 +164,7 @@ def download_ebook(
 @router.get("/{product_id}/download-url")
 def get_ebook_download_url(
     product_id: int,
+    request: Request,
     db: Session = Depends(get_db),
     user: User = Depends(get_current_user),
     mode: str = Query("download", regex="^(download|read)$"),
@@ -172,8 +174,9 @@ def get_ebook_download_url(
     Utile si l'auth est par Bearer token (impossible de l'envoyer via window.open).
     Le frontend fait : window.open(json.url, "_blank").
 
-    En dev (local, pas de R2), retourne simplement l'URL du endpoint /download
-    qui sera servi en FileResponse.
+    En dev (local, pas de R2), retourne une URL absolue vers /download avec un
+    jeton court basé sur la session courante. Cela évite les popups et les
+    soucis de cookies SameSite sur les navigations directes inter-domaines.
     """
     product = _check_access_and_get_product(product_id, db, user)
     inline = mode == "read"
@@ -183,10 +186,14 @@ def get_ebook_download_url(
         url = _presigned_r2_url(product.pdf_path, filename, inline)
         return {"url": url, "mode": mode, "filename": filename}
 
-    # Fallback dev — pas d'URL signée, on laisse le frontend appeler /download
+    session_id = request.cookies.get("session_id") or request.query_params.get("access_token")
+    params = {"mode": mode}
+    if session_id:
+        params["access_token"] = session_id
+
+    url = str(request.url_for("download_ebook", product_id=product_id))
     return {
-        "url": None,
+        "url": f"{url}?{urlencode(params)}",
         "mode": mode,
         "filename": filename,
-        "fallback_endpoint": f"/ebooks/{product_id}/download?mode={mode}",
     }

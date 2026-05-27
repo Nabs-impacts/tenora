@@ -291,9 +291,7 @@ export interface Ebook {
 export const ebooksApi = {
   list: () => api.get<Ebook[]>("/ebooks/"),
   /**
-   * URL absolue du endpoint backend (302 → presigned R2).
-   * Utilisé avec window.open() — pas avec fetch() — pour eviter le blocage CORS
-   * lors du redirect cross-origin vers *.r2.cloudflarestorage.com.
+   * URL absolue du endpoint backend direct.
    *
    * @param mode "download" (defaut, telechargement) ou "read" (lecture inline navigateur)
    */
@@ -301,12 +299,11 @@ export const ebooksApi = {
     `${api.defaults.baseURL}/ebooks/${id}/download?mode=${mode}`,
 
   /**
-   * Endpoint JSON alternatif : retourne `{ url: "https://presigned..." }`.
-   * À utiliser uniquement si l'auth est par Bearer token (non envoyable via window.open).
-   * Avec cookies httpOnly (cas actuel Tenora), `getDownloadUrl` + window.open suffit.
+   * Endpoint JSON : retourne une URL déjà autorisée.
+   * Le clic utilisateur déclenche ensuite soit un <a download>, soit une navigation directe.
    */
   getPresignedUrl: (id: number, mode: "download" | "read" = "download") =>
-    api.get<{ url: string | null; mode: string; filename: string; fallback_endpoint?: string }>(
+    api.get<{ url: string; mode: string; filename: string }>(
       `/ebooks/${id}/download-url`,
       { params: { mode } },
     ),
