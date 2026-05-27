@@ -56,7 +56,7 @@ interface Ebook {
 
 interface FormState {
   name: string;
-  price: number;
+  price: string;          // string pour éviter le 0 pré-rempli
   description: string;
   ebook_category_id: string;
   is_active: boolean;
@@ -65,7 +65,7 @@ interface FormState {
 
 const empty: FormState = {
   name: "",
-  price: 0,
+  price: "",
   description: "",
   ebook_category_id: "",
   is_active: true,
@@ -166,7 +166,7 @@ export default function Ebooks() {
     setEditing(e);
     setForm({
       name: e.name || "",
-      price: e.price || 0,
+      price: e.price ? String(e.price) : "",
       description: e.description || "",
       ebook_category_id: e.ebook_category_id?.toString() || "",
       is_active: e.is_active ?? true,
@@ -181,24 +181,31 @@ export default function Ebooks() {
   const handleSave = async () => {
     if (!form.name.trim()) { toast.error("Titre requis"); return; }
 
-    const discount = form.discount_percent === "" ? 0 : Number(form.discount_percent);
-    if (discount != null && (discount <= 0 || discount >= 100)) {
+    const priceNum = Number(form.price) || 0;
+
+    // Réduction : vide = 0 (pas de promo). Si renseignée, doit être entre 1 et 99.
+    const discountStr = form.discount_percent.trim();
+    const discount = discountStr === "" ? 0 : Number(discountStr);
+    if (discountStr !== "" && (isNaN(discount) || discount <= 0 || discount >= 100)) {
       toast.error("La réduction doit être entre 1 et 99%");
       return;
     }
 
     setSaving(true);
     try {
-      const payload: Record<string, unknown> = {
+      const payload = {
         name: form.name.trim(),
         description: form.description,
-        price: Number(form.price) || 0,
+        price: priceNum,
         ebook_category_id: form.ebook_category_id ? Number(form.ebook_category_id) : null,
         discount_percent: discount,
         is_active: form.is_active,
       };
 
       let targetId: number;
+      let imagePath: string | undefined = editing?.image_path;
+      let pdfPath: string | undefined = editing?.pdf_path;
+
       if (editing) {
         await updateEbook(editing.id, payload);
         targetId = editing.id;
@@ -210,15 +217,42 @@ export default function Ebooks() {
       }
 
       if (pendingImage && targetId) {
-        await uploadEbookImage(targetId, pendingImage);
+        const { data } = await uploadEbookImage(targetId, pendingImage);
+        if (data?.image_path) imagePath = data.image_path;
       }
       if (pendingPdf && targetId) {
-        await uploadEbookPdf(targetId, pendingPdf);
+        const { data } = await uploadEbookPdf(targetId, pendingPdf);
+        if (data?.pdf_path) pdfPath = data.pdf_path;
         toast.success("PDF uploadé");
       }
 
+      // Mise à jour locale — pas de rechargement réseau
+      const catId = form.ebook_category_id ? Number(form.ebook_category_id) : null;
+      const catName = catId ? (cats.find((c) => c.id === catId)?.name ?? null) : null;
+      const finalPrice = discount > 0 ? Math.round(priceNum * (1 - discount / 100)) : priceNum;
+
+      const updatedEbook: Ebook = {
+        id: targetId,
+        name: payload.name,
+        description: payload.description,
+        price: priceNum,
+        discount_percent: discount > 0 ? discount : null,
+        final_price: finalPrice,
+        is_active: payload.is_active,
+        image_path: imagePath,
+        pdf_path: pdfPath,
+        ebook_category_id: catId,
+        ebook_category_name: catName,
+        created_at: editing?.created_at ?? new Date().toISOString(),
+      };
+
+      if (editing) {
+        setEbooks((prev) => prev.map((e) => (e.id === targetId ? updatedEbook : e)));
+      } else {
+        setEbooks((prev) => [updatedEbook, ...prev]);
+      }
+
       setShowForm(false);
-      loadEbooks();
     } catch (err: any) {
       toast.error(err?.response?.data?.detail || "Erreur lors de la sauvegarde");
     } finally {
@@ -231,7 +265,7 @@ export default function Ebooks() {
     try {
       await deleteEbook(toDelete.id);
       toast.success("Ebook supprimé");
-      loadEbooks();
+      setEbooks((prev) => prev.filter((e) => e.id !== toDelete.id));
     } catch {
       toast.error("Erreur lors de la suppression");
     } finally {
@@ -261,16 +295,24 @@ export default function Ebooks() {
 
   const quickUploadImage = (e: Ebook) =>
     pickAndUpload("image/*", async (file) => {
-      await uploadEbookImage(e.id, file);
+      const { data } = await uploadEbookImage(e.id, file);
       toast.success("Couverture mise à jour");
-      loadEbooks();
+      if (data?.image_path) {
+        setEbooks((prev) =>
+          prev.map((eb) => eb.id === e.id ? { ...eb, image_path: data.image_path } : eb),
+        );
+      }
     });
 
   const quickUploadPdf = (e: Ebook) =>
     pickAndUpload(".pdf,application/pdf", async (file) => {
-      await uploadEbookPdf(e.id, file);
+      const { data } = await uploadEbookPdf(e.id, file);
       toast.success("PDF uploadé");
-      loadEbooks();
+      if (data?.pdf_path) {
+        setEbooks((prev) =>
+          prev.map((eb) => eb.id === e.id ? { ...eb, pdf_path: data.pdf_path } : eb),
+        );
+      }
     });
 
   const handleDeleteImageInForm = async () => {
@@ -278,8 +320,9 @@ export default function Ebooks() {
       try {
         await deleteEbookImage(editing.id);
         toast.success("Image supprimée");
-        setEditing({ ...editing, image_path: undefined });
-        loadEbooks();
+        const updated = { ...editing, image_path: undefined };
+        setEditing(updated);
+        setEbooks((prev) => prev.map((e) => (e.id === editing.id ? updated : e)));
       } catch {
         toast.error("Erreur suppression image");
         return;
@@ -294,8 +337,9 @@ export default function Ebooks() {
       try {
         await deleteEbookPdf(editing.id);
         toast.success("PDF supprimé");
-        setEditing({ ...editing, pdf_path: undefined });
-        loadEbooks();
+        const updated = { ...editing, pdf_path: undefined };
+        setEditing(updated);
+        setEbooks((prev) => prev.map((e) => (e.id === editing.id ? updated : e)));
       } catch {
         toast.error("Erreur suppression PDF");
         return;
@@ -337,17 +381,32 @@ export default function Ebooks() {
           is_active: genreForm.is_active,
         });
         toast.success("Genre mis à jour");
+        setCats((prev) =>
+          prev.map((c) =>
+            c.id === genreEditing.id
+              ? { ...c, name: genreForm.name.trim(), slug, description: genreForm.description, is_active: genreForm.is_active }
+              : c,
+          ),
+        );
       } else {
-        await createEbookCategory({
+        const { data } = await createEbookCategory({
           name: genreForm.name.trim(),
           slug,
           description: genreForm.description,
           is_active: genreForm.is_active,
         });
         toast.success("Genre créé");
+        const newCat: EbookCat = {
+          id: data.id,
+          name: genreForm.name.trim(),
+          slug,
+          description: genreForm.description,
+          is_active: genreForm.is_active,
+          ebook_count: 0,
+        };
+        setCats((prev) => [...prev, newCat].sort((a, b) => a.name.localeCompare(b.name)));
       }
       setGenreOpen(false);
-      loadCats();
     } catch (err: any) {
       toast.error(err?.response?.data?.detail || "Erreur");
     } finally {
@@ -360,7 +419,7 @@ export default function Ebooks() {
     try {
       await deleteEbookCategory(c.id);
       toast.success("Genre supprimé");
-      loadCats();
+      setCats((prev) => prev.filter((cat) => cat.id !== c.id));
     } catch (err: any) {
       if (err?.response?.status === 409) {
         toast.error("Ce genre contient des ebooks. Réassignez-les d'abord.");
@@ -373,13 +432,15 @@ export default function Ebooks() {
   const handleGenreToggle = async (c: EbookCat) => {
     try {
       await updateEbookCategory(c.id, { is_active: !c.is_active });
-      loadCats();
+      setCats((prev) =>
+        prev.map((cat) => (cat.id === c.id ? { ...cat, is_active: !c.is_active } : cat)),
+      );
     } catch {
       toast.error("Erreur");
     }
   };
 
-  // Quick-create from inside the ebook form
+  // Quick-create depuis le formulaire ebook
   const handleQuickGenreCreate = async (name: string) => {
     const trimmed = name.trim();
     if (!trimmed) return;
@@ -391,10 +452,16 @@ export default function Ebooks() {
         is_active: true,
       });
       toast.success("Genre créé");
-      await loadCats();
-      if (data?.id) {
-        setForm((f) => ({ ...f, ebook_category_id: String(data.id) }));
-      }
+      const newCat: EbookCat = {
+        id: data.id,
+        name: trimmed,
+        slug: slugify(trimmed),
+        description: "",
+        is_active: true,
+        ebook_count: 0,
+      };
+      setCats((prev) => [...prev, newCat].sort((a, b) => a.name.localeCompare(b.name)));
+      setForm((f) => ({ ...f, ebook_category_id: String(data.id) }));
     } catch (err: any) {
       toast.error(err?.response?.data?.detail || "Erreur");
     }
@@ -554,6 +621,7 @@ export default function Ebooks() {
                 value={form.name}
                 onChange={(e) => setForm({ ...form, name: e.target.value })}
                 className="rounded-none border-2 mono"
+                placeholder="Titre de l'ebook"
               />
             </div>
 
@@ -565,23 +633,25 @@ export default function Ebooks() {
                 <Input
                   type="number"
                   inputMode="numeric"
+                  min={0}
                   value={form.price}
-                  onChange={(e) => setForm({ ...form, price: Number(e.target.value) })}
+                  onChange={(e) => setForm({ ...form, price: e.target.value })}
+                  placeholder="Ex : 2500"
                   className="rounded-none border-2 mono"
                 />
               </div>
               <div>
                 <Label className="eyebrow mb-1.5 block" style={{ color: "hsl(var(--muted-foreground))" }}>
-                  Réduction %
+                  Réduction % <span className="normal-case opacity-50">(optionnel)</span>
                 </Label>
                 <Input
                   type="number"
                   inputMode="numeric"
-                  min={0}
+                  min={1}
                   max={99}
                   value={form.discount_percent}
                   onChange={(e) => setForm({ ...form, discount_percent: e.target.value })}
-                  placeholder="0 = pas de promo"
+                  placeholder="Laisser vide = pas de promo"
                   className="rounded-none border-2 mono"
                 />
               </div>
@@ -634,6 +704,7 @@ export default function Ebooks() {
                 value={form.description}
                 onChange={(e) => setForm({ ...form, description: e.target.value })}
                 className="rounded-none border-2 mono text-sm"
+                placeholder="Résumé ou description de l'ebook…"
               />
             </div>
 
@@ -913,6 +984,7 @@ function EbookRow({
   onUploadPdf: () => void;
 }) {
   const hasPdf = !!ebook.pdf_path;
+  const hasDiscount = ebook.discount_percent != null && ebook.discount_percent > 0;
   return (
     <div className="flex flex-col md:flex-row md:items-stretch gap-3 p-3 sm:p-4 hover:bg-muted/30 transition-colors">
       {ebook.image_path ? (
@@ -948,7 +1020,7 @@ function EbookRow({
               {ebook.ebook_category_name}
             </span>
           )}
-          {ebook.discount_percent != null && ebook.discount_percent > 0 && (
+          {hasDiscount && (
             <span className="chip border-destructive/40 text-destructive">
               -{ebook.discount_percent}%
             </span>
@@ -968,9 +1040,22 @@ function EbookRow({
         </div>
 
         <div className="flex items-center justify-between gap-3 mt-auto pt-2">
-          <p className="display text-base sm:text-lg text-primary mono">
-            {fmtPrice(ebook.price)}
-          </p>
+          <div className="flex items-baseline gap-2">
+            {hasDiscount ? (
+              <>
+                <p className="display text-base sm:text-lg text-primary mono">
+                  {fmtPrice(ebook.final_price)}
+                </p>
+                <p className="mono text-xs text-muted-foreground line-through">
+                  {fmtPrice(ebook.price)}
+                </p>
+              </>
+            ) : (
+              <p className="display text-base sm:text-lg text-primary mono">
+                {fmtPrice(ebook.price)}
+              </p>
+            )}
+          </div>
 
           <div className="hidden md:flex items-center gap-1">
             <Button size="icon" variant="ghost"
