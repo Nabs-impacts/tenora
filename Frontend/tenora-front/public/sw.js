@@ -167,3 +167,5 @@ self.addEventListener("message", (event) => {
     caches.keys().then((keys) => Promise.all(keys.map((k) => caches.delete(k))));
   }
 });
+//
+
