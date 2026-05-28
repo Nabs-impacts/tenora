@@ -14,6 +14,7 @@
   "dir": "ltr",
   "categories": ["shopping", "entertainment", "lifestyle"],
   "prefer_related_applications": false,
+
   "icons": [
     {
       "src": "/icons/icon-192.png",
@@ -22,7 +23,7 @@
       "purpose": "any"
     },
     {
-      "src": "/icons/icon-192.png",
+      "src": "/icons/icon-192-maskable.png",
       "sizes": "192x192",
       "type": "image/png",
       "purpose": "maskable"
@@ -34,7 +35,7 @@
       "purpose": "any"
     },
     {
-      "src": "/icons/icon-512.png",
+      "src": "/icons/icon-512-maskable.png",
       "sizes": "512x512",
       "type": "image/png",
       "purpose": "maskable"
@@ -46,29 +47,37 @@
       "purpose": "any"
     }
   ],
+
   "shortcuts": [
     {
       "name": "Boutique",
       "short_name": "Boutique",
       "description": "Parcourir tous les produits Tenora",
       "url": "/boutique?source=shortcut",
-      "icons": [{ "src": "/icons/icon-192.png", "sizes": "192x192", "type": "image/png" }]
+      "icons": [
+        { "src": "/icons/icon-192.png", "sizes": "192x192", "type": "image/png" }
+      ]
     },
     {
       "name": "Mes commandes",
       "short_name": "Commandes",
       "description": "Suivre mes commandes en cours",
       "url": "/mes-commandes?source=shortcut",
-      "icons": [{ "src": "/icons/icon-192.png", "sizes": "192x192", "type": "image/png" }]
+      "icons": [
+        { "src": "/icons/icon-192.png", "sizes": "192x192", "type": "image/png" }
+      ]
     },
     {
       "name": "Recharges jeux",
       "short_name": "Jeux",
       "description": "Free Fire, MLBB et autres recharges gaming",
       "url": "/boutique?categorie=jeux&source=shortcut",
-      "icons": [{ "src": "/icons/icon-192.png", "sizes": "192x192", "type": "image/png" }]
+      "icons": [
+        { "src": "/icons/icon-192.png", "sizes": "192x192", "type": "image/png" }
+      ]
     }
   ],
+
   "screenshots": [
     {
       "src": "/screenshots/home-mobile.png",
