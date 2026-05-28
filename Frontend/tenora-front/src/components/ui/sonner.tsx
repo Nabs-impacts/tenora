@@ -13,46 +13,56 @@ const Toaster = ({ ...props }: ToasterProps) => {
       toastOptions={{
         classNames: {
           toast:
-            "group toast relative overflow-hidden rounded-none border border-border/50 bg-card/96 backdrop-blur-sm text-foreground " +
-            "shadow-[0_4px_24px_-4px_hsl(var(--background)/0.9)] " +
-            "before:absolute before:left-0 before:top-0 before:h-full before:w-[3px] before:bg-muted-foreground/40 " +
-            "[&_[data-title]]:font-bold [&_[data-title]]:uppercase [&_[data-title]]:tracking-[0.14em] [&_[data-title]]:text-[11px]",
+            "group toast relative overflow-hidden rounded-none " +
+            "border border-border/25 bg-card/97 backdrop-blur-sm " +
+            "shadow-[0_2px_12px_-2px_hsl(var(--foreground)/0.06)] " +
+            "before:absolute before:left-0 before:top-0 before:h-full before:w-[2px] before:bg-border/60 " +
+            "[&_[data-title]]:font-bold [&_[data-title]]:uppercase [&_[data-title]]:tracking-[0.13em] [&_[data-title]]:text-[10.5px]",
 
           success:
-            "border-success/20 " +
-            "before:bg-success " +
-            "[&_[data-icon]]:text-success " +
-            "[&_[data-title]]:text-success",
+            "border-[hsl(142_72%_29%/0.18)] " +
+            "before:bg-[hsl(142_72%_29%)] " +
+            "[&_[data-icon]]:text-[hsl(142_72%_29%)] " +
+            "[&_[data-title]]:text-[hsl(142_72%_29%)] " +
+            "[&_[data-description]]:text-[hsl(142_72%_29%/0.72)]",
 
           error:
-            "border-destructive/20 " +
-            "before:bg-destructive " +
-            "[&_[data-icon]]:text-destructive " +
-            "[&_[data-title]]:text-destructive",
+            "border-[hsl(0_72%_51%/0.18)] " +
+            "before:bg-[hsl(0_72%_51%)] " +
+            "[&_[data-icon]]:text-[hsl(0_72%_51%)] " +
+            "[&_[data-title]]:text-[hsl(0_72%_51%)] " +
+            "[&_[data-description]]:text-[hsl(0_72%_51%/0.72)]",
 
           warning:
-            "border-warning/20 " +
-            "before:bg-warning " +
-            "[&_[data-icon]]:text-warning " +
-            "[&_[data-title]]:text-warning",
+            "border-[hsl(38_92%_50%/0.18)] " +
+            "before:bg-[hsl(38_92%_50%)] " +
+            "[&_[data-icon]]:text-[hsl(38_92%_50%)] " +
+            "[&_[data-title]]:text-[hsl(38_92%_50%)] " +
+            "[&_[data-description]]:text-[hsl(38_92%_50%/0.72)]",
 
           info:
-            "border-accent/20 " +
-            "before:bg-accent " +
-            "[&_[data-icon]]:text-accent " +
-            "[&_[data-title]]:text-accent",
+            "border-border/30 " +
+            "before:bg-muted-foreground/50 " +
+            "[&_[data-icon]]:text-foreground/70 " +
+            "[&_[data-title]]:text-foreground " +
+            "[&_[data-description]]:text-muted-foreground",
 
           description:
-            "text-muted-foreground text-[12px] leading-relaxed",
+            "text-[11.5px] leading-relaxed",
 
           actionButton:
-            "rounded-none border border-primary bg-primary text-primary-foreground font-bold uppercase tracking-wider text-[11px]",
+            "rounded-none border border-current bg-transparent text-current " +
+            "font-bold uppercase tracking-wider text-[10px] " +
+            "hover:bg-current/10 transition-colors",
 
           cancelButton:
-            "rounded-none border border-border bg-muted text-muted-foreground font-bold uppercase tracking-wider text-[11px]",
+            "rounded-none border border-border/50 bg-transparent " +
+            "text-muted-foreground font-bold uppercase tracking-wider text-[10px] " +
+            "hover:bg-muted/40 transition-colors",
 
           closeButton:
-            "rounded-none border border-border/40 text-muted-foreground hover:text-foreground hover:bg-muted/50",
+            "rounded-none border border-border/30 text-muted-foreground/60 " +
+            "hover:text-foreground hover:border-border/60 hover:bg-muted/30 transition-colors",
         },
       }}
       {...props}
