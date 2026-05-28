@@ -24,13 +24,13 @@ const ToastViewport = React.forwardRef<
 ToastViewport.displayName = ToastPrimitives.Viewport.displayName;
 
 /**
- * Brutalist toast — FRAPPANT :
- * fond saturé vert/rouge, texte blanc, bordure 2.5px noire, ombre dure 5px.
- * Cohérent light/dark/mobile.
+ * Brutalist toast — BORDURES FRAPPANTES :
+ * double cadre (bordure extérieure 3px + bordure intérieure inset)
+ * fond saturé, texte blanc/noir, cohérent light/dark/mobile.
  */
 const toastVariants = cva(
   "group pointer-events-auto relative flex w-full items-start justify-between gap-3 overflow-hidden " +
-  "rounded-none border-[2.5px] border-black dark:border-white p-4 pr-11 " +
+  "rounded-none border-[3px] border-black dark:border-white p-4 pr-11 " +
   "transition-transform " +
   "data-[swipe=cancel]:translate-x-0 " +
   "data-[swipe=end]:translate-x-[var(--radix-toast-swipe-end-x)] " +
@@ -47,13 +47,13 @@ const toastVariants = cva(
       variant: {
         default:
           "default bg-foreground text-background border-black dark:border-white " +
-          "shadow-[5px_5px_0_0_#000] dark:shadow-[5px_5px_0_0_#fff]",
+          "shadow-[4px_4px_0_0_#000,inset_0_0_0_2px_rgba(255,255,255,0.95)] dark:shadow-[4px_4px_0_0_#fff,inset_0_0_0_2px_rgba(0,0,0,0.25)]",
         success:
           "success bg-[hsl(142_72%_38%)] dark:bg-[hsl(142_70%_42%)] text-white border-black " +
-          "shadow-[5px_5px_0_0_#000]",
+          "shadow-[4px_4px_0_0_#000,inset_0_0_0_2px_rgba(0,0,0,0.25)]",
         destructive:
           "destructive bg-[hsl(0_78%_48%)] dark:bg-[hsl(0_75%_52%)] text-white border-black " +
-          "shadow-[5px_5px_0_0_#000]",
+          "shadow-[4px_4px_0_0_#000,inset_0_0_0_2px_rgba(0,0,0,0.25)]",
       },
     },
     defaultVariants: { variant: "default" },
@@ -94,6 +94,7 @@ const ToastAction = React.forwardRef<
 ));
 ToastAction.displayName = ToastPrimitives.Action.displayName;
 
+// CROIX NOIRE sur fond blanc, bordure noire épaisse, toujours visible
 const ToastClose = React.forwardRef<
   React.ElementRef<typeof ToastPrimitives.Close>,
   React.ComponentPropsWithoutRef<typeof ToastPrimitives.Close>
@@ -101,16 +102,16 @@ const ToastClose = React.forwardRef<
   <ToastPrimitives.Close
     ref={ref}
     className={cn(
-      "absolute right-2 top-2 grid h-6 w-6 place-items-center rounded-none border-[2px] border-current bg-white " +
-      "text-black opacity-90 transition-all " +
-      "hover:opacity-100 hover:bg-black hover:text-white " +
-      "focus:opacity-100 focus:outline-none focus:ring-2 focus:ring-ring",
+      "absolute right-2 top-2 grid h-6 w-6 place-items-center rounded-none border-[2.5px] border-black bg-white " +
+      "text-black opacity-100 transition-all " +
+      "hover:bg-gray-100 " +
+      "focus:outline-none focus:ring-2 focus:ring-ring",
       className,
     )}
     toast-close=""
     {...props}
   >
-    <X className="h-3.5 w-3.5" strokeWidth={3} />
+    <X className="h-4 w-4" strokeWidth={3.5} />
   </ToastPrimitives.Close>
 ));
 ToastClose.displayName = ToastPrimitives.Close.displayName;
