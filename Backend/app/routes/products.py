@@ -27,10 +27,6 @@ def get_base_url(request: Request) -> str:
 
 
 def save_image(file: UploadFile, subfolder: str) -> str:
-    """
-    Lit l'UploadFile, valide l'extension/taille, et délègue l'upload à storage_service.
-    Retourne l'URL complète (R2) ou le chemin relatif (local).
-    """
     ext = (file.filename or "").split(".")[-1].lower()
     if ext not in ALLOWED_EXTENSIONS:
         raise HTTPException(status_code=400, detail="Format non supporté. JPG, PNG ou WEBP uniquement.")
@@ -43,7 +39,6 @@ def save_image(file: UploadFile, subfolder: str) -> str:
 
 
 def delete_old_image(image_path: str | None) -> None:
-    """Supprime une image depuis R2 ou le disque local selon l'environnement."""
     storage_delete(image_path)
 
 
@@ -53,10 +48,6 @@ def get_ratings(db: Session, product_ids: list[int]) -> dict[int, tuple[float, i
 
 
 def get_category_images(db: Session, cat_ids: set[int], base_url: str) -> dict[int, str | None]:
-    """
-    Retourne un dict {category_id: image_url} pour le fallback image produit.
-    Compatible avec les chemins relatifs (local) et les URLs complètes (R2).
-    """
     cats = db.query(Category).filter(Category.id.in_(cat_ids)).all()
     return {
         c.id: get_display_url(c.image_path, base_url)
@@ -78,10 +69,6 @@ def get_categories(request: Request, db: Session = Depends(get_db)):
 
 @router.get("/categories/tree", response_model=list[dict])
 def get_categories_tree(request: Request, db: Session = Depends(get_db)):
-    """
-    ✅ OPTIMISÉ — 1 seule requête SQL.
-    Compatible R2 : image_url gérée via get_display_url().
-    """
     base = get_base_url(request)
 
     all_cats = (
@@ -133,9 +120,11 @@ def get_subcategories(category_id: int, request: Request, db: Session = Depends(
 
 @router.get("/categories/{category_id}/products", response_model=list[ProductResponse])
 def get_products_by_category(category_id: int, request: Request, db: Session = Depends(get_db)):
+    # ✅ FIX — exclure les ebooks de la boutique principale
     products = db.query(Product).filter(
         Product.category_id == category_id,
-        Product.is_active == True
+        Product.is_active == True,
+        Product.is_ebook == False,  # noqa: E712
     ).all()
     base       = get_base_url(request)
     cat_images = get_category_images(db, {p.category_id for p in products}, base)
@@ -204,7 +193,11 @@ def shop_products(
     q: str | None = None,
     sort: str = "newest"
 ):
-    query = db.query(Product).filter(Product.is_active == True)
+    # ✅ FIX — exclure les ebooks de la boutique principale
+    query = db.query(Product).filter(
+        Product.is_active == True,
+        Product.is_ebook == False,  # noqa: E712
+    )
 
     if category_id is not None:
         sub_ids = [r.id for r in db.query(Category.id).filter(Category.parent_id == category_id).all()]
@@ -242,7 +235,12 @@ def shop_products(
 
 @router.get("/search", response_model=list[ProductResponse])
 def search_products(q: str, request: Request, db: Session = Depends(get_db)):
-    products   = db.query(Product).filter(Product.name.ilike(f"%{q}%"), Product.is_active == True).limit(20).all()
+    # ✅ FIX — exclure les ebooks de la recherche boutique principale
+    products = db.query(Product).filter(
+        Product.name.ilike(f"%{q}%"),
+        Product.is_active == True,
+        Product.is_ebook == False,  # noqa: E712
+    ).limit(20).all()
     base       = get_base_url(request)
     cat_images = get_category_images(db, {p.category_id for p in products}, base)
     ratings    = get_ratings(db, [p.id for p in products])
@@ -257,7 +255,11 @@ def search_products(q: str, request: Request, db: Session = Depends(get_db)):
 
 @router.get("/", response_model=list[ProductResponse])
 def get_products(request: Request, db: Session = Depends(get_db)):
-    products   = db.query(Product).filter(Product.is_active == True).all()
+    # ✅ FIX — exclure les ebooks du listing général
+    products = db.query(Product).filter(
+        Product.is_active == True,
+        Product.is_ebook == False,  # noqa: E712
+    ).all()
     base       = get_base_url(request)
     cat_images = get_category_images(db, {p.category_id for p in products}, base)
     ratings    = get_ratings(db, [p.id for p in products])
@@ -270,7 +272,6 @@ def get_products(request: Request, db: Session = Depends(get_db)):
     ]
 
 
-
 @router.get("/by-ids", response_model=list[ProductResponse])
 def get_products_by_ids(
     ids: str,
@@ -281,6 +282,8 @@ def get_products_by_ids(
     Récupère plusieurs produits actifs en une requête, à partir d'une liste
     d'IDs séparés par des virgules. Utilisé notamment par la section
     "Hot Now" de la page d'accueil (produits mis en avant via le panel admin).
+    Les ebooks peuvent apparaître ici s'ils sont explicitement mis en avant
+    par l'admin — ce comportement est intentionnel.
     """
     try:
         id_list = [int(x) for x in ids.split(",") if x.strip()]
@@ -288,10 +291,9 @@ def get_products_by_ids(
         raise HTTPException(status_code=400, detail="Liste d'IDs invalide.")
     if not id_list:
         return []
-    # Limite raisonnable
     id_list = id_list[:50]
 
-    products   = (
+    products = (
         db.query(Product)
           .filter(Product.id.in_(id_list), Product.is_active == True)
           .all()
