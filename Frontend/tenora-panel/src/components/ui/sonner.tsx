@@ -4,13 +4,12 @@ import { Toaster as Sonner, toast } from "sonner";
 type ToasterProps = React.ComponentProps<typeof Sonner>;
 
 /**
- * Brutalist toast — équilibré :
- *  - coins carrés
- *  - bordure 1.5px nette (pas exagérée)
- *  - ombre dure offset 3px (signature brutaliste sobre)
- *  - fond teinté : VERT pour succès, ROUGE pour erreur, AMBRE pour warning
- *  - typo mono uppercase pour le titre
- *  - cohérent light / dark / mobile (largeur fluide via Sonner)
+ * Brutalist toast — FRAPPANT mais équilibré :
+ *  - fond saturé (vert succès / rouge erreur / ambre warning)
+ *  - texte blanc épais, lisible immédiatement
+ *  - bordure 2.5px noire nette
+ *  - ombre dure 5px offset (signature brutaliste)
+ *  - cohérent light / dark / mobile
  */
 const Toaster = ({ ...props }: ToasterProps) => {
   const { theme = "system" } = useTheme();
@@ -23,63 +22,65 @@ const Toaster = ({ ...props }: ToasterProps) => {
         classNames: {
           toast:
             "group toast relative w-full overflow-hidden rounded-none " +
-            "border-[1.5px] border-foreground/85 bg-card text-foreground " +
-            "shadow-[3px_3px_0_0_hsl(var(--foreground))] " +
+            "border-[2.5px] border-black dark:border-white " +
+            "bg-card text-foreground " +
+            "shadow-[5px_5px_0_0_#000] dark:shadow-[5px_5px_0_0_#fff] " +
             "p-4 " +
-            "[&_[data-icon]]:shrink-0 " +
-            "[&_[data-title]]:font-mono [&_[data-title]]:font-bold [&_[data-title]]:uppercase " +
-            "[&_[data-title]]:tracking-[0.14em] [&_[data-title]]:text-[11px]",
+            "[&_[data-icon]]:shrink-0 [&_[data-icon]]:h-5 [&_[data-icon]]:w-5 " +
+            "[&_[data-title]]:font-mono [&_[data-title]]:font-black [&_[data-title]]:uppercase " +
+            "[&_[data-title]]:tracking-[0.16em] [&_[data-title]]:text-[12px]",
 
-          // SUCCESS — fond vert clair, accent vert profond, lisible light & dark
+          // SUCCESS — vert saturé, texte blanc
           success:
-            "border-[hsl(142_68%_28%)] " +
-            "bg-[hsl(142_60%_94%)] dark:bg-[hsl(142_45%_12%)] " +
-            "shadow-[3px_3px_0_0_hsl(142_68%_28%)] " +
-            "[&_[data-icon]]:text-[hsl(142_68%_28%)] dark:[&_[data-icon]]:text-[hsl(142_55%_60%)] " +
-            "[&_[data-title]]:text-[hsl(142_68%_22%)] dark:[&_[data-title]]:text-[hsl(142_55%_72%)] " +
-            "[&_[data-description]]:text-[hsl(142_45%_25%)] dark:[&_[data-description]]:text-[hsl(142_30%_78%)]",
+            "!bg-[hsl(142_72%_38%)] dark:!bg-[hsl(142_70%_42%)] " +
+            "!border-black dark:!border-black " +
+            "!text-white " +
+            "shadow-[5px_5px_0_0_#000] " +
+            "[&_[data-icon]]:!text-white " +
+            "[&_[data-title]]:!text-white " +
+            "[&_[data-description]]:!text-white/90",
 
-          // ERROR — fond rouge clair, accent rouge profond
+          // ERROR — rouge saturé, texte blanc
           error:
-            "border-[hsl(0_72%_45%)] " +
-            "bg-[hsl(0_75%_95%)] dark:bg-[hsl(0_50%_13%)] " +
-            "shadow-[3px_3px_0_0_hsl(0_72%_45%)] " +
-            "[&_[data-icon]]:text-[hsl(0_72%_45%)] dark:[&_[data-icon]]:text-[hsl(0_75%_68%)] " +
-            "[&_[data-title]]:text-[hsl(0_72%_38%)] dark:[&_[data-title]]:text-[hsl(0_75%_78%)] " +
-            "[&_[data-description]]:text-[hsl(0_55%_30%)] dark:[&_[data-description]]:text-[hsl(0_35%_82%)]",
+            "!bg-[hsl(0_78%_48%)] dark:!bg-[hsl(0_75%_52%)] " +
+            "!border-black dark:!border-black " +
+            "!text-white " +
+            "shadow-[5px_5px_0_0_#000] " +
+            "[&_[data-icon]]:!text-white " +
+            "[&_[data-title]]:!text-white " +
+            "[&_[data-description]]:!text-white/90",
 
-          // WARNING — ambre
+          // WARNING — ambre saturé
           warning:
-            "border-[hsl(35_85%_40%)] " +
-            "bg-[hsl(45_95%_93%)] dark:bg-[hsl(38_55%_13%)] " +
-            "shadow-[3px_3px_0_0_hsl(35_85%_40%)] " +
-            "[&_[data-icon]]:text-[hsl(35_85%_40%)] dark:[&_[data-icon]]:text-[hsl(40_90%_65%)] " +
-            "[&_[data-title]]:text-[hsl(30_85%_30%)] dark:[&_[data-title]]:text-[hsl(40_90%_75%)] " +
-            "[&_[data-description]]:text-[hsl(30_55%_25%)] dark:[&_[data-description]]:text-[hsl(40_35%_82%)]",
+            "!bg-[hsl(38_95%_50%)] dark:!bg-[hsl(40_92%_55%)] " +
+            "!border-black dark:!border-black " +
+            "!text-black " +
+            "shadow-[5px_5px_0_0_#000] " +
+            "[&_[data-icon]]:!text-black " +
+            "[&_[data-title]]:!text-black " +
+            "[&_[data-description]]:!text-black/80",
 
-          // INFO / default — neutre brutaliste
           info:
-            "border-foreground/85 bg-card " +
-            "[&_[data-icon]]:text-foreground " +
-            "[&_[data-title]]:text-foreground " +
-            "[&_[data-description]]:text-muted-foreground",
+            "!bg-foreground !text-background !border-black dark:!border-white " +
+            "[&_[data-icon]]:!text-background " +
+            "[&_[data-title]]:!text-background " +
+            "[&_[data-description]]:!text-background/85",
 
-          description: "text-[12px] leading-relaxed mt-0.5",
+          description: "text-[12.5px] leading-snug mt-1 font-medium",
 
           actionButton:
-            "rounded-none border-[1.5px] border-current bg-transparent text-current " +
-            "font-mono font-bold uppercase tracking-wider text-[10px] px-2.5 py-1 " +
+            "!rounded-none !border-[2px] !border-current !bg-white !text-black " +
+            "font-mono font-black uppercase tracking-wider !text-[10px] !px-3 !py-1 " +
             "transition-transform active:translate-x-[1px] active:translate-y-[1px] " +
-            "hover:bg-current/10",
+            "hover:!bg-black hover:!text-white",
 
           cancelButton:
-            "rounded-none border-[1.5px] border-foreground/60 bg-transparent " +
-            "text-foreground/70 font-mono font-bold uppercase tracking-wider text-[10px] px-2.5 py-1 " +
-            "hover:bg-muted",
+            "!rounded-none !border-[2px] !border-current !bg-transparent " +
+            "!text-current font-mono font-black uppercase tracking-wider !text-[10px] !px-3 !py-1",
 
           closeButton:
-            "!rounded-none !border-[1.5px] !border-current !bg-card " +
-            "!text-current opacity-80 hover:opacity-100 hover:!bg-muted",
+            "!rounded-none !border-[2px] !border-current !bg-white !text-black " +
+            "hover:!bg-black hover:!text-white",
         },
       }}
       {...props}
