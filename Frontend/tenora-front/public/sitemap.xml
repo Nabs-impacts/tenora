@@ -1,0 +1,78 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+
+  <!-- ══════════════════════════════════════════
+       TENORA DIGITAL — sitemap.xml
+       Domaine : https://tenora-digital.store
+       Généré  : 2026-05-29
+       ══════════════════════════════════════════ -->
+
+  <!-- ① Accueil — page la plus importante -->
+  <url>
+    <loc>https://tenora-digital.store/</loc>
+    <lastmod>2026-05-29</lastmod>
+    <changefreq>weekly</changefreq>
+    <priority>1.0</priority>
+  </url>
+
+  <!-- ② Boutique — catalogue produits, mis à jour fréquemment -->
+  <url>
+    <loc>https://tenora-digital.store/boutique</loc>
+    <lastmod>2026-05-29</lastmod>
+    <changefreq>daily</changefreq>
+    <priority>0.9</priority>
+  </url>
+
+  <!-- ③ Ebooks — page catalogue ebooks -->
+  <url>
+    <loc>https://tenora-digital.store/ebooks</loc>
+    <lastmod>2026-05-29</lastmod>
+    <changefreq>weekly</changefreq>
+    <priority>0.8</priority>
+  </url>
+
+  <!-- ④ Installer l'app (PWA) — page d'installation mobile -->
+  <url>
+    <loc>https://tenora-digital.store/installer</loc>
+    <lastmod>2026-05-29</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.5</priority>
+  </url>
+
+  <!-- ⑤ Mentions légales & Politique de confidentialité -->
+  <url>
+    <loc>https://tenora-digital.store/legal</loc>
+    <lastmod>2026-05-29</lastmod>
+    <changefreq>yearly</changefreq>
+    <priority>0.3</priority>
+  </url>
+
+  <!-- ══════════════════════════════════════════
+       PAGES EXCLUES VOLONTAIREMENT :
+       /connexion        → page de connexion (noindex recommandé)
+       /inscription      → formulaire d'inscription
+       /verifier-email   → route protégée (ProtectedRoute)
+       /profil           → route protégée
+       /mes-commandes    → route protégée
+       /import           → route protégée (requireVerified)
+       /confirmation     → page transactionnelle éphémère
+       /produit/:id      → à ajouter dynamiquement via sitemap API
+                           (voir note ci-dessous)
+       ══════════════════════════════════════════
+
+       NOTE — Pages produits dynamiques (/produit/:id) :
+       Ces URLs ne peuvent pas être listées ici en dur car les IDs
+       viennent de ton API backend. Pour les indexer correctement,
+       génère un sitemap dynamique côté serveur qui liste tous les
+       produits actifs, ou ajoute les URLs manuellement au fur et
+       à mesure dans ce fichier sous la forme :
+
+       <url>
+         <loc>https://tenora-digital.store/produit/42</loc>
+         <lastmod>2026-05-29</lastmod>
+         <changefreq>weekly</changefreq>
+         <priority>0.7</priority>
+       </url>
+       ══════════════════════════════════════════ -->
+
+</urlset>
