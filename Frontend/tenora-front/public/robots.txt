@@ -1,0 +1,17 @@
+# Robots.txt — tenora-digital.store
+# Mis à jour : 2026-05-29
+
+User-agent: *
+Allow: /
+
+# Pages privées / inutiles à indexer
+Disallow: /connexion
+Disallow: /inscription
+Disallow: /verifier-email
+Disallow: /profil
+Disallow: /mes-commandes
+Disallow: /import
+Disallow: /confirmation
+
+# Sitemap — permet à Google de trouver toutes les pages
+Sitemap: https://tenora-digital.store/sitemap.xml

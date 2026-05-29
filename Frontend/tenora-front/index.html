@@ -13,10 +13,12 @@
     <link rel="icon" type="image/svg+xml" href="/icons/favicon.svg" />
     <!-- PNG 32px : fallback navigateurs sans support SVG -->
     <link rel="icon" type="image/png" sizes="32x32" href="/icons/favicon-32x32.png" />
+    <!-- PNG 48px : taille minimale requise par Google Search pour afficher le logo -->
+    <link rel="icon" type="image/png" sizes="48x48" href="/icons/favicon-48x48.png" />
     <!-- PNG 16px : très vieux navigateurs / onglets compressés -->
     <link rel="icon" type="image/png" sizes="16x16" href="/icons/favicon-16x16.png" />
-    <!-- ICO : Internet Explorer + outils tiers (Slack preview, etc.) -->
-    <link rel="shortcut icon" href="/icons/favicon.ico" />
+    <!-- ICO à la RACINE — Google cherche /favicon.ico, pas /icons/favicon.ico -->
+    <link rel="shortcut icon" href="/favicon.ico" />
 
     <!-- ─── PWA / Add to Home Screen ─────────────────────────────── -->
     <link rel="manifest" href="/manifest.webmanifest" />
@@ -35,24 +37,31 @@
     <title>Tenora — Recharges, Abonnements & Import au Niger</title>
     <meta name="description" content="Recharges Free Fire, MLBB & bien d'autres, abonnements, ebooks et import Shein/Alibaba — paiement Mobile Money, livraison Niamey partout au Niger." />
     <meta name="author" content="Tenora" />
-    <meta name="robots" content="index, follow" />
+    <meta name="robots" content="index, follow, max-image-preview:large" />
+
+    <!-- Canonical — évite le contenu dupliqué -->
+    <link rel="canonical" href="https://tenora-digital.store/" />
 
     <!-- Open Graph (Facebook, WhatsApp, Telegram…) -->
+    <!-- CORRECTION : og:image en URL ABSOLUE (l'URL relative ne fonctionne pas pour les aperçus) -->
     <meta property="og:type"        content="website" />
     <meta property="og:site_name"   content="Tenora" />
+    <meta property="og:url"         content="https://tenora-digital.store/" />
     <meta property="og:title"       content="Tenora — Le digital, livré au Niger" />
     <meta property="og:description" content="Recharges jeux, Netflix, ebooks et import — paiement Mobile Money, livraison rapide." />
-    <meta property="og:image"       content="/icons/icon-512.png" />
+    <meta property="og:image"       content="https://tenora-digital.store/icons/icon-512.png" />
     <meta property="og:image:type"  content="image/png" />
     <meta property="og:image:width" content="512" />
     <meta property="og:image:height" content="512" />
     <meta property="og:image:alt"   content="Logo Tenora" />
+    <meta property="og:locale"      content="fr_FR" />
 
     <!-- Twitter / X Card -->
+    <!-- CORRECTION : twitter:image en URL ABSOLUE -->
     <meta name="twitter:card"        content="summary" />
     <meta name="twitter:title"       content="Tenora — Le digital, livré au Niger" />
     <meta name="twitter:description" content="Recharges jeux, Netflix, ebooks et import — paiement Mobile Money, livraison rapide." />
-    <meta name="twitter:image"       content="/icons/icon-512.png" />
+    <meta name="twitter:image"       content="https://tenora-digital.store/icons/icon-512.png" />
     <meta name="twitter:image:alt"   content="Logo Tenora" />
 
     <!-- ─── Polices ───────────────────────────────────────────────── -->
