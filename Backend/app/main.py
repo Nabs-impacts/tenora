@@ -159,10 +159,10 @@ app.add_middleware(
 
 @app.get("/robots.txt", include_in_schema=False)
 async def robots():
-    path = os.path.join(os.path.dirname(__file__), "..", "static", "robots.txt")
+    path = "/var/www/tenora/static/robots.txt"
     if os.path.exists(path):
         return FileResponse(path, media_type="text/plain")
-    return FileResponse("robots.txt", media_type="text/plain")
+    return JSONResponse(status_code=404, content={"detail": "robots.txt non trouvé"})
 
 
 @app.get("/sitemap.xml", include_in_schema=False)

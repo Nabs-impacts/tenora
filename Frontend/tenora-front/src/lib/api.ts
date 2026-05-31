@@ -73,7 +73,7 @@ api.interceptors.response.use(
         showOnce("timeout", () =>
           toast.error("La requete a pris trop de temps. Verifiez votre connexion.")
         );
-      } else if (error.code !== "ERR_NETWORK" && error.message !== "Network Error") {
+      } else {
         showOnce("unreachable", () =>
           toast.error("Impossible de contacter le serveur. Reessayez.")
         );

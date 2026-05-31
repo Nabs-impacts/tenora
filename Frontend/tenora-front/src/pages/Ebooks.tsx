@@ -56,7 +56,8 @@ export default function Ebooks() {
   const { data: myOrders = [] } = useQuery({
     queryKey: ["orders", "my"],
     enabled: !!user,
-    staleTime: 30_000,
+    staleTime: 2 * 60_000,   // 2 min — suffit pour savoir si un ebook est acheté
+    gcTime: 30 * 60_000,
     queryFn: () => ordersApi.myOrders().then((r) => r.data),
   });
 

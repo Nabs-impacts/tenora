@@ -101,10 +101,14 @@ export default function Orders() {
   // Deux fetchs en parallèle : commandes produits + demandes d'import
   const ordersQ = useQuery({
     queryKey: ["orders", "my"],
+    staleTime: 5 * 60_000,
+    gcTime: 30 * 60_000,
     queryFn: () => ordersApi.myOrders().then((r) => r.data),
   });
   const importsQ = useQuery({
     queryKey: ["imports", "my"],
+    staleTime: 5 * 60_000,
+    gcTime: 30 * 60_000,
     queryFn: () => importsApi.myRequests().then((r) => r.data),
   });
 

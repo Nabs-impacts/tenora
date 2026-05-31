@@ -1,6 +1,7 @@
 import csv
 import io
 import re
+import time as _time
 from datetime import datetime, timedelta
 
 from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile
@@ -13,6 +14,10 @@ from sqlalchemy.orm import Session, joinedload
 
 from app.config import settings
 from app.database import get_db
+
+# Cache dashboard 30 s — évite de re-requêter à chaque refresh admin
+_dashboard_cache: dict = {}
+_DASHBOARD_TTL = 30  # secondes
 from app.dependencies import get_admin_user
 from app.models.coupon import Coupon
 from app.models.ebook import EbookCategory
@@ -40,6 +45,16 @@ from app.services.storage_service import (
 from app.services.storage_service import (
     upload_file as storage_upload,
 )
+
+# Import différé pour éviter la dépendance circulaire ; appelé seulement
+# depuis update_order_status() pour invalider le cache stats après un changement.
+def _invalidate_stats() -> None:
+    try:
+        from app.routes.panel_statistics import invalidate_stats_cache
+        invalidate_stats_cache()
+    except Exception:
+        pass
+
 
 try:
     from PIL import Image as _PilImage
@@ -202,6 +217,12 @@ def get_dashboard(
     db:    Session = Depends(get_db),
     admin: User    = Depends(get_admin_user),
 ):
+    # Cache 30 s — le dashboard est souvent affiché plusieurs fois par minute
+    now_ts = _time.time()
+    cached = _dashboard_cache.get("data")
+    if cached and now_ts - _dashboard_cache.get("ts", 0) < _DASHBOARD_TTL:
+        return cached
+
     now   = datetime.utcnow()
     today = now.replace(hour=0, minute=0, second=0, microsecond=0)
     week  = today - timedelta(days=7)
@@ -246,7 +267,7 @@ def get_dashboard(
         .all()
     )
 
-    return {
+    result = {
         "stats": {
             "total_orders":     order_stats.total_orders,
             "pending_orders":   order_stats.pending_orders,
@@ -262,6 +283,9 @@ def get_dashboard(
             for r in daily_orders
         ],
     }
+    _dashboard_cache["data"] = result
+    _dashboard_cache["ts"]   = _time.time()
+    return result
 
 
 # ─── COMMANDES ────────────────────────────────────────────────────────────────
@@ -384,6 +408,10 @@ def update_order_status(
 
     db.commit()
     db.refresh(order)
+
+    # Invalider le cache stats + dashboard quand un statut change
+    _invalidate_stats()
+    _dashboard_cache.clear()
 
     if client and product and old_status != OrderStatus[data.status]:
         try:

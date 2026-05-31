@@ -18,14 +18,14 @@ export function SiteProvider({ children }: { children: ReactNode }) {
   const { data, isLoading } = useQuery({
     queryKey: SITE_QUERY_KEY,
     queryFn: () => siteApi.getInit().then((r) => r.data),
-    // staleTime aligné sur refetchInterval : pendant 60s, naviguer entre pages
-    // réutilise le cache au lieu de refaire un appel réseau à chaque mount.
-    // Avant (staleTime: 0) : chaque mount déclenchait un refetch superflu.
-    staleTime: 60_000,
-    gcTime: 30 * 60_000,
-    refetchInterval: 60_000,
-    refetchIntervalInBackground: false,
-    // Pas de retry : si le serveur est down, le polling reprend à 60s.
+    // 10 min en cache — les settings site (maintenance, annonce, paiements)
+    // changent rarement. Pas de polling actif : on recharge à la reconnexion
+    // et manuellement via refresh() depuis le panel admin si besoin.
+    staleTime: 10 * 60_000,
+    gcTime: 60 * 60_000,
+    // Recharge automatiquement quand la connexion revient (combiné avec OfflineBanner
+    // qui invalide toutes les queries au retour en ligne)
+    refetchOnReconnect: true,
     retry: false,
   });
 

@@ -52,7 +52,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     gcTime: Infinity,
     retry: false,
     refetchOnWindowFocus: false,
-    refetchOnReconnect: false,
+    refetchOnReconnect: true,
   });
 
   const user = data ?? null;

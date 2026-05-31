@@ -4,6 +4,7 @@ import { Footer } from "./Footer";
 import { MobileTabBar } from "./MobileTabBar";
 import { AnnouncementBar } from "./AnnouncementBar";
 import { WhatsAppFab } from "./WhatsAppFab";
+import { OfflineBanner } from "./OfflineBanner";
 import { useEffect } from "react";
 
 export function AppLayout() {
@@ -14,6 +15,9 @@ export function AppLayout() {
 
   return (
     <div className="min-h-dvh flex flex-col bg-background overflow-x-hidden px-safe">
+      {/* Bannière offline — fixed, z-9999, invisible quand en ligne */}
+      <OfflineBanner />
+
       <a
         href="#main"
         className="sr-only focus:not-sr-only focus:fixed focus:top-2 focus:left-2 focus:z-50 focus:px-4 focus:py-2 focus:bg-primary focus:text-primary-foreground focus:font-bold focus:uppercase focus:tracking-widest focus:text-xs"
@@ -32,4 +36,3 @@ export function AppLayout() {
     </div>
   );
 }
-
