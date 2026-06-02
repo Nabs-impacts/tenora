@@ -88,9 +88,9 @@ const tickerItems = [
 ];
 
 const testimonials = [
-  { name: "Aminata K.", location: "Niamey · Plateau", text: "Reçu mon Netflix en 3 minutes chrono. Sérieux et fiable." },
-  { name: "Ibrahim M.", location: "Niamey · Talladjé", text: "J'avais peur d'être arnaqué — tout s'est passé parfaitement." },
-  { name: "Fatouma D.", location: "Niamey · Banifandou", text: "Recharge MLBB instantanée, prix imbattables. Je commande chaque semaine." },
+  { name: "@kayz227", rating: 5, text: "Depuis le temps que j'attends ca et enfin un service de qualité 😭, Je recommande" },
+  { name: "@Dark_vad", rating: 5, text: "Franchement les gars foncez c tellement plus simple que les vendeurs peu serieux la c'est une revolution" },
+  { name: "@kira", rating: 5, text: "Support vraiment respectueux et rapide 10/10 Rien à redire." },
 ];
 
 const whyUs = [
@@ -144,7 +144,7 @@ export default function Home() {
               </span>
             </div>
             <span className="hidden sm:inline-flex items-center gap-1 text-[10px] font-bold uppercase tracking-widest text-muted-foreground font-mono">
-              <span className="text-secondary">//</span> v.2026.05
+              <span className="text-secondary">//</span> V.06-2026
             </span>
           </div>
 
@@ -317,19 +317,21 @@ export default function Home() {
                 style={{ animationDelay: `${i * 100}ms` }}
                 className="brut-card p-6 md:p-7 flex flex-col animate-fade-up hover:shadow-brut-cyan hover:border-accent"
               >
-                <div className="flex gap-0.5 text-primary mb-4">
+                <div className="flex gap-0.5 mb-4">
                   {Array.from({ length: 5 }).map((_, k) => (
-                    <Star key={k} className="size-4 fill-primary" />
+                    <Star
+                      key={k}
+                      className={`size-4 ${k < t.rating ? "fill-primary text-primary" : "fill-none text-muted-foreground/40"}`}
+                    />
                   ))}
                 </div>
                 <p className="text-sm leading-relaxed flex-1 normal-case tracking-normal">"{t.text}"</p>
                 <div className="flex items-center gap-3 mt-5 pt-5 border-t-2 border-border">
                   <div className="size-10 bg-primary text-primary-foreground flex items-center justify-center font-display font-bold text-xl">
-                    {t.name[0]}
+                    {t.name[1]?.toUpperCase() ?? t.name[0]}
                   </div>
                   <div className="flex-1 min-w-0">
                     <p className="font-bold text-sm">{t.name}</p>
-                    <p className="text-[10px] uppercase tracking-widest text-muted-foreground font-mono">{t.location}</p>
                   </div>
                 </div>
               </div>
