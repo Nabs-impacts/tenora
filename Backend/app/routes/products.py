@@ -332,14 +332,37 @@ def whatsapp_redirect(product_id: int, request: Request, db: Session = Depends(g
         raise HTTPException(status_code=404, detail="Produit introuvable")
     if not p.whatsapp_redirect:
         raise HTTPException(status_code=400, detail="Ce produit ne supporte pas la redirection WhatsApp")
-    lines = [f"Bonjour, je suis intéressé(e) par *{p.name}* ({int(p.final_price):,} FCFA)."]
+
+    # ── Ligne d'accroche ──────────────────────────────────────────────────────
+    price_str = f"{int(p.final_price):,} FCFA".replace(",", " ")
+    lines = [
+        f"Bonjour {settings.APP_NAME} !",
+        "",
+        f"Je suis interesse(e) par *{p.name}* a {price_str}.",
+    ]
+
+    # ── Champs personnalisés (ex: taille, quantité…) ──────────────────────────
+    custom_fields = []
     if p.required_fields:
-        lines.append("")
         for field in p.required_fields:
             value = request.query_params.get(field.get("key", ""), "").strip()
             if value:
-                lines.append(f"• {field.get('label', field.get('key'))}: {value}")
-    message = quote("\n".join(lines))
+                custom_fields.append(f"- {field.get('label', field.get('key'))}: {value}")
+
+    if custom_fields:
+        lines.append("")
+        lines.append("*Details de ma commande :*")
+        lines.extend(custom_fields)
+
+    lines += [
+        "",
+        "Pouvez-vous me confirmer la disponibilite et le delai de livraison ?",
+        "",
+        "Merci !",
+    ]
+
+    # ── Encodage strict : safe='' pour encoder aussi les slashes ─────────────
+    message = quote("\n".join(lines), safe="")
     from app.services.settings_service import get_setting
     raw_number = get_setting(db, "whatsapp_number", None) or settings.WHATSAPP_NUMBER or ""
     number = raw_number.strip().replace("+", "").replace(" ", "")

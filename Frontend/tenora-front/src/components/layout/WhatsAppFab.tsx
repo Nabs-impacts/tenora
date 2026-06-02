@@ -6,6 +6,7 @@ import { useSite } from "@/context/SiteContext";
  * - Masqué sur les pages produit en mobile (la sticky CTA prend le relais).
  * - Tooltip "Service client" au hover (desktop).
  * - Position au-dessus de la MobileTabBar avec marge sécurité iOS.
+ * - Message pré-rempli sans emoji pour compatibilité maximale avec tous les appareils.
  */
 export function WhatsAppFab() {
   const { data } = useSite();
@@ -18,9 +19,13 @@ export function WhatsAppFab() {
 
   const isProductPage = pathname.startsWith("/produit/");
 
-  const href = `https://wa.me/${number}?text=${encodeURIComponent(
-    "Bonjour Tenora 👋 j'ai une question"
-  )}`;
+  // Pas d'emoji dans le message : certains appareils/versions WhatsApp Business
+  // les affichent en losange (ex: v2.21 sur Android 6). On utilise uniquement
+  // du texte et le formatage natif WhatsApp (*gras*).
+  const message = encodeURIComponent(
+    "Bonjour Tenora ! J'ai une question, pouvez-vous m'aider ?"
+  );
+  const href = `https://wa.me/${number}?text=${message}`;
 
   return (
     <a

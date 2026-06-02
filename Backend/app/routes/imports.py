@@ -132,18 +132,22 @@ def redirect_to_whatsapp(
         raise HTTPException(status_code=500, detail="Numéro WhatsApp non configuré.")
 
     has_screenshot = bool(import_req.screenshot_path)
+    price_note = "(capture de paiement jointe)" if has_screenshot else "(capture a envoyer dans la conversation)"
     message = (
-        f"👋 Bonjour {settings.APP_NAME} !\n\n"
-        f"Je souhaite passer une commande via votre service pour le site {cat_name}\n\n"
-        "🛒 *Détails de ma demande*\n\n"
-        f"• Lien article : {import_req.article_url}\n"
-        f"• Description : {import_req.article_description or 'Non précisée'}\n"
-        f"• Référence : #{import_req.id}\n\n"
-        "Merci d'avance pour votre retour rapide !\n\n"
-        "— Envoyé depuis Tenora."
+        f"Bonjour {settings.APP_NAME} !\n\n"
+        f"Je souhaite passer une commande via votre service pour le site {cat_name}.\n\n"
+        f"*Details de ma demande #{import_req.id}*\n\n"
+        f"- Lien article : {import_req.article_url}\n"
+        f"- Description : {import_req.article_description or 'Non precisee'}\n"
+        f"- Reference : #{import_req.id}\n"
+        f"- Paiement : {price_note}\n\n"
+        "Pouvez-vous me communiquer le prix total (article + frais de port) ?\n\n"
+        "Merci d'avance !"
     )
 
-    encoded_message = urllib.parse.quote(message)
+    # safe='' : encode TOUS les caracteres speciaux, y compris les slashes
+    # des URLs imbriquees (liens Amazon, Aliexpress…) qui sinon cassent le lien.
+    encoded_message = urllib.parse.quote(message, safe="")
     whatsapp_url = f"https://wa.me/{number}?text={encoded_message}"
 
     if import_req.status == ImportStatus.pending:

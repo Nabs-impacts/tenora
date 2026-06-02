@@ -485,7 +485,7 @@ export default function ProductPage() {
                                   {" — "}
                                   <a
                                     href={`https://wa.me/${wa}?text=${encodeURIComponent(
-                                      "Bonjour, mon code promo ne marche pas"
+                                      `Bonjour Tenora ! Mon code promo ne fonctionne pas pour "${product.name}". Pouvez-vous m'aider ?`
                                     )}`}
                                     target="_blank"
                                     rel="noopener"
@@ -655,7 +655,7 @@ export default function ProductPage() {
                     Un problème ?{" "}
                     <a
                       href={`https://wa.me/${wa}?text=${encodeURIComponent(
-                        `Commande #${order.id} — besoin d'aide`
+                        `Bonjour Tenora ! J'ai besoin d'aide pour ma commande #${order.id} (${product.name}). Merci.`
                       )}`}
                       target="_blank"
                       rel="noopener"
