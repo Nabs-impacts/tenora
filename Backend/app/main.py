@@ -106,18 +106,38 @@ async def unhandled_exception_handler(request: Request, exc: Exception):
     )
 
 
+def _clean_pydantic_errors(errors: list) -> list:
+    """
+    Pydantic v2 inclut ctx.error comme objet Exception (non JSON-sérialisable).
+    On le convertit en string pour éviter le crash du JSONResponse.
+    """
+    result = []
+    for e in errors:
+        clean = dict(e)
+        if "ctx" in clean and isinstance(clean.get("ctx"), dict):
+            clean["ctx"] = {
+                k: str(v) if isinstance(v, Exception) else v
+                for k, v in clean["ctx"].items()
+            }
+        result.append(clean)
+    return result
+
+
 @app.exception_handler(RequestValidationError)
 async def validation_exception_handler(request: Request, exc: RequestValidationError):
+    sanitized = _clean_pydantic_errors(exc.errors())
     if settings.DEBUG:
-        return JSONResponse(status_code=422, content={"detail": exc.errors()})
-    errors = exc.errors()
+        return JSONResponse(status_code=422, content={"detail": sanitized})
     messages = []
-    for e in errors:
+    for e in sanitized:
         loc = " → ".join(str(l) for l in e.get("loc", []) if l != "body")
         msg = e.get("msg", "Valeur invalide")
+        # Pydantic v2 préfixe les ValueError avec "Value error, " — on le retire
+        if msg.startswith("Value error, "):
+            msg = msg[len("Value error, "):]
         messages.append(f"{loc} : {msg}" if loc else msg)
     detail = " | ".join(messages) if messages else "Données invalides. Vérifiez votre saisie."
-    logger.warning(f"Validation error | {request.method} {request.url.path} | {exc.errors()}")
+    logger.warning(f"Validation error | {request.method} {request.url.path} | {sanitized}")
     return JSONResponse(status_code=422, content={"detail": detail})
 
 

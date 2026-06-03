@@ -39,9 +39,14 @@ class UserRegister(BaseModel):
     @field_validator("phone")
     @classmethod
     def phone_format(cls, v):
-        if v and not re.match(r"^0?(70|74|8\d|9\d)\d{6}$", v):
-            raise ValueError("Format invalide")
-        return v
+        if not v:
+            return v
+        # Supprimer les espaces, tirets et points saisis par l'utilisateur
+        cleaned = re.sub(r"[\s\-\.]", "", v)
+        # Accepte : +22712345678 | 22712345678 | 12345678 (8 chiffres locaux)
+        if not re.match(r"^(\+?227)?[0-9]{8}$", cleaned):
+            raise ValueError("Numéro invalide. Utilisez +227XXXXXXXX ou 8 chiffres")
+        return cleaned
 
     @field_validator("username")
     @classmethod
@@ -78,9 +83,12 @@ class UserUpdate(BaseModel):
     @field_validator("phone")
     @classmethod
     def phone_format(cls, v):
-        if v and not re.match(r"^0?(70|74|8\d|9\d)\d{6}$", v):
-            raise ValueError("Numéro invalide. Exemples: 96XXXXXX, 80XXXXXX")
-        return v
+        if not v:
+            return v
+        cleaned = re.sub(r"[\s\-\.]", "", v)
+        if not re.match(r"^(\+?227)?[0-9]{8}$", cleaned):
+            raise ValueError("Numéro invalide. Utilisez +227XXXXXXXX ou 8 chiffres")
+        return cleaned
 
     @field_validator("username")
     @classmethod

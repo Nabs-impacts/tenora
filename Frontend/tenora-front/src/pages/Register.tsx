@@ -1,12 +1,48 @@
 import { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import { UserPlus, Loader2, Mail, Lock, Phone, AtSign, Info, Eye, EyeOff } from "lucide-react";
+import { UserPlus, Loader2, Mail, Lock, Phone, AtSign, Info, Eye, EyeOff, CheckCircle2, XCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/context/AuthContext";
 import { TenoraLogo } from "@/components/brand/TenoraLogo";
 import { toast } from "sonner";
 
 const USERNAME_RE = /^[a-zA-Z0-9_-]{3,20}$/;
+// Accepte : +22712345678 | 22712345678 | 12345678 (8 chiffres locaux)
+const PHONE_RE = /^(\+?227)?[0-9]{8}$/;
+
+function cleanPhone(v: string): string {
+  return v.replace(/[\s\-\.]/g, "");
+}
+
+function isPhoneValid(v: string): boolean {
+  if (!v.trim()) return true; // optionnel
+  return PHONE_RE.test(cleanPhone(v));
+}
+
+interface PwdChecks {
+  length: boolean;
+  upper: boolean;
+  digit: boolean;
+}
+
+function checkPassword(v: string): PwdChecks {
+  return {
+    length: v.length >= 8,
+    upper: /[A-Z]/.test(v),
+    digit: /[0-9]/.test(v),
+  };
+}
+
+function PwdRule({ ok, label }: { ok: boolean; label: string }) {
+  return (
+    <span className={`flex items-center gap-1 ${ok ? "text-emerald-500" : "text-muted-foreground/70"}`}>
+      {ok
+        ? <CheckCircle2 className="size-3 shrink-0" />
+        : <XCircle className="size-3 shrink-0" />}
+      {label}
+    </span>
+  );
+}
 
 export default function Register() {
   const { register } = useAuth();
@@ -19,8 +55,12 @@ export default function Register() {
   const [accepted, setAccepted] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const [pwdTouched, setPwdTouched] = useState(false);
 
   const usernameValid = username === "" || USERNAME_RE.test(username);
+  const phoneValid = isPhoneValid(phone);
+  const pwdChecks = checkPassword(password);
+  const pwdOk = pwdChecks.length && pwdChecks.upper && pwdChecks.digit;
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -32,14 +72,33 @@ export default function Register() {
       setError("Pseudo invalide : 3 à 20 caractères, lettres, chiffres, _ ou -.");
       return;
     }
+    if (!phoneValid) {
+      setError("Numéro de téléphone invalide. Formats acceptés : +227XXXXXXXX ou 8 chiffres.");
+      return;
+    }
+    if (!pwdOk) {
+      setPwdTouched(true);
+      setError("Le mot de passe ne respecte pas les critères requis.");
+      return;
+    }
     setLoading(true);
     setError("");
     try {
-      await register(email, password, phone || undefined, username || undefined);
+      // On envoie le numéro normalisé (sans espaces)
+      const phoneNormalized = phone.trim() ? cleanPhone(phone) : undefined;
+      await register(email, password, phoneNormalized, username || undefined);
       toast.success("Compte créé ! Vérifiez votre email.");
       navigate("/verifier-email");
     } catch (err: any) {
-      setError(err?.response?.data?.detail || "Impossible de créer le compte.");
+      const detail = err?.response?.data?.detail;
+      if (typeof detail === "string") {
+        setError(detail);
+      } else if (Array.isArray(detail) && detail.length > 0) {
+        const msg = detail[0]?.msg || detail[0]?.message || "";
+        setError(msg.replace("Value error, ", "") || "Données invalides. Vérifiez votre saisie.");
+      } else {
+        setError("Impossible de créer le compte. Vérifiez vos informations.");
+      }
     } finally {
       setLoading(false);
     }
@@ -65,10 +124,11 @@ export default function Register() {
         <form onSubmit={submit} className="space-y-4">
           {error && (
             <div className="border border-destructive/40 bg-destructive/10 text-destructive text-sm px-3 py-2">
-              {typeof error === "string" ? error : "Erreur"}
+              {error}
             </div>
           )}
 
+          {/* Email */}
           <div>
             <label htmlFor="register-email" className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Email</label>
             <div className="relative mt-1.5">
@@ -87,6 +147,7 @@ export default function Register() {
             </div>
           </div>
 
+          {/* Pseudonyme */}
           <div>
             <label htmlFor="register-username" className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
               Pseudonyme <span className="text-muted-foreground/60 normal-case font-normal tracking-normal">(optionnel)</span>
@@ -113,6 +174,7 @@ export default function Register() {
             </p>
           </div>
 
+          {/* Téléphone */}
           <div>
             <label htmlFor="register-phone" className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
               Téléphone <span className="text-muted-foreground/60 normal-case font-normal tracking-normal">(optionnel)</span>
@@ -127,12 +189,25 @@ export default function Register() {
                 inputMode="tel"
                 value={phone}
                 onChange={(e) => setPhone(e.target.value)}
-                placeholder="XXXXXXXX"
-                className="w-full h-11 pl-10 pr-3 bg-input border border-border text-base focus:outline-none focus:ring-2 focus:ring-primary/40 focus:border-primary transition-colors"
+                placeholder="+227 XX XX XX XX"
+                className={`w-full h-11 pl-10 pr-3 bg-input border text-base focus:outline-none focus:ring-2 focus:ring-primary/40 transition-colors ${
+                  phoneValid ? "border-border focus:border-primary" : "border-destructive/60 focus:border-destructive"
+                }`}
               />
             </div>
+            {!phoneValid ? (
+              <p className="text-[11px] text-destructive mt-1.5">
+                Format invalide. Exemples : <code>81617838</code> ou <code>+22781617838</code>
+              </p>
+            ) : (
+              <p className="flex items-start gap-1.5 text-[11px] text-muted-foreground mt-1.5">
+                <Info className="size-3 mt-0.5 shrink-0" />
+                <span>8 chiffres, avec ou sans +227. Les espaces sont acceptés.</span>
+              </p>
+            )}
           </div>
 
+          {/* Mot de passe */}
           <div>
             <label htmlFor="register-password" className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Mot de passe</label>
             <div className="relative mt-1.5">
@@ -143,10 +218,11 @@ export default function Register() {
                 type={showPwd ? "text" : "password"}
                 autoComplete="new-password"
                 required
-                minLength={8}
                 value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                className="w-full h-11 pl-10 pr-11 bg-input border border-border text-base focus:outline-none focus:ring-2 focus:ring-primary/40 focus:border-primary transition-colors"
+                onChange={(e) => { setPassword(e.target.value); setPwdTouched(true); }}
+                className={`w-full h-11 pl-10 pr-11 bg-input border text-base focus:outline-none focus:ring-2 focus:ring-primary/40 transition-colors ${
+                  !pwdTouched || pwdOk ? "border-border focus:border-primary" : "border-destructive/60 focus:border-destructive"
+                }`}
               />
               <button
                 type="button"
@@ -158,7 +234,17 @@ export default function Register() {
                 {showPwd ? <EyeOff className="size-4" /> : <Eye className="size-4" />}
               </button>
             </div>
-            <p className="text-[11px] text-muted-foreground mt-1">8 caractères minimum.</p>
+            {/* Indicateurs de force du mot de passe */}
+            {pwdTouched && (
+              <div className="flex flex-wrap gap-x-3 gap-y-0.5 mt-1.5">
+                <PwdRule ok={pwdChecks.length} label="8 caractères min." />
+                <PwdRule ok={pwdChecks.upper} label="1 majuscule" />
+                <PwdRule ok={pwdChecks.digit} label="1 chiffre" />
+              </div>
+            )}
+            {!pwdTouched && (
+              <p className="text-[11px] text-muted-foreground mt-1">8 caractères min., 1 majuscule, 1 chiffre.</p>
+            )}
           </div>
 
           <label className="flex items-start gap-2.5 text-xs text-muted-foreground leading-relaxed cursor-pointer select-none border-2 border-border hover:border-primary/60 transition-colors p-3">
@@ -183,7 +269,7 @@ export default function Register() {
 
           <Button
             type="submit"
-            disabled={loading || !accepted || !usernameValid}
+            disabled={loading || !accepted || !usernameValid || !phoneValid}
             size="lg"
             className="w-full h-12 bg-gradient-primary text-primary-foreground shadow-glow disabled:opacity-50"
           >
