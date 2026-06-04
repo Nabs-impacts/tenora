@@ -12,7 +12,7 @@ from app.schemas.schemas_product import ProductResponse
 from app.services.settings_service import (
     DEFAULT_ANNOUNCEMENT,
     DEFAULT_PAYMENT_METHODS,
-    get_setting,
+    get_all_settings,
 )
 from app.services.storage_service import get_display_url
 
@@ -62,11 +62,14 @@ def _set_cache_headers(response: Response, data: dict) -> str:
 
 def _build_site_data(db: Session) -> dict:
     """Construit le payload complet des paramètres publics (mis en cache)."""
-    maintenance     = get_setting(db, "maintenance_mode", False)
-    announcement    = get_setting(db, "announcement", DEFAULT_ANNOUNCEMENT)
-    payment_methods = get_setting(db, "payment_methods", DEFAULT_PAYMENT_METHODS)
-    featured_ids    = get_setting(db, "featured_product_ids", [])
-    whatsapp_number = get_setting(db, "whatsapp_number", "") or ""
+    # ─── 1 seule requête DB au lieu de 5 get_setting() séquentiels ────────
+    s = get_all_settings(db)
+
+    maintenance     = s.get("maintenance_mode", False)
+    announcement    = s.get("announcement", DEFAULT_ANNOUNCEMENT)
+    payment_methods = s.get("payment_methods", DEFAULT_PAYMENT_METHODS)
+    featured_ids    = s.get("featured_product_ids", [])
+    whatsapp_number = s.get("whatsapp_number", "") or ""
 
     active_methods = [m for m in payment_methods if m.get("enabled", True)]
 
@@ -134,8 +137,10 @@ def public_settings(response: Response, db: Session = Depends(get_db)):
         _set_cache_headers(response, partial)
         return partial
 
-    maintenance  = get_setting(db, "maintenance_mode", False)
-    announcement = get_setting(db, "announcement", DEFAULT_ANNOUNCEMENT)
+    # Fallback sans cache : on batch quand même les settings en 1 requête
+    s = get_all_settings(db)
+    maintenance  = s.get("maintenance_mode", False)
+    announcement = s.get("announcement", DEFAULT_ANNOUNCEMENT)
 
     partial = {
         "maintenance":  bool(maintenance),

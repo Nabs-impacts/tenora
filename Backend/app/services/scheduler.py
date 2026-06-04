@@ -10,33 +10,38 @@ from app.models.session import Session as SessionModel
 
 scheduler = BackgroundScheduler()
 
+
 def clean_expired_sessions():
     db: Session = SessionLocal()
     try:
         deleted = db.query(SessionModel).filter(
             SessionModel.expires_at < datetime.utcnow()
-        ).delete()
+        ).delete(synchronize_session=False)
         db.commit()
         if deleted > 0:
             logger.info(f"Nettoyage sessions | {deleted} sessions expirées supprimées")
     except Exception as e:
         logger.error(f"Erreur nettoyage sessions | {e}")
+        db.rollback()
     finally:
         db.close()
+
 
 def clean_expired_otps():
     db: Session = SessionLocal()
     try:
         deleted = db.query(OTPCode).filter(
             OTPCode.expires_at < datetime.utcnow()
-        ).delete()
+        ).delete(synchronize_session=False)
         db.commit()
         if deleted > 0:
             logger.info(f"Nettoyage OTP | {deleted} codes expirés supprimés")
     except Exception as e:
         logger.error(f"Erreur nettoyage OTP | {e}")
+        db.rollback()
     finally:
         db.close()
+
 
 def generate_report():
     db: Session = SessionLocal()
@@ -45,19 +50,11 @@ def generate_report():
         from app.models.order import Order, OrderStatus
         from app.models.user import User
 
-        total_users = db.query(User).count()
-        new_orders = db.query(Order).filter(
-            Order.status == OrderStatus.pending
-        ).count()
-        processing_orders = db.query(Order).filter(
-            Order.status == OrderStatus.processing
-        ).count()
-        completed_orders = db.query(Order).filter(
-            Order.status == OrderStatus.completed
-        ).count()
-        pending_imports = db.query(ImportRequest).filter(
-            ImportRequest.status == "pending"
-        ).count()
+        total_users          = db.query(User).count()
+        new_orders           = db.query(Order).filter(Order.status == OrderStatus.pending).count()
+        processing_orders    = db.query(Order).filter(Order.status == OrderStatus.processing).count()
+        completed_orders     = db.query(Order).filter(Order.status == OrderStatus.completed).count()
+        pending_imports      = db.query(ImportRequest).filter(ImportRequest.status == "pending").count()
 
         logger.info(
             f"📊 RAPPORT 2H | "
@@ -72,17 +69,10 @@ def generate_report():
     finally:
         db.close()
 
+
 def start_scheduler():
-    scheduler.add_job(clean_expired_sessions, "interval", hours=1)
-    scheduler.add_job(clean_expired_otps, "interval", hours=1)
-    scheduler.add_job(generate_report, "interval", hours=2)
+    scheduler.add_job(clean_expired_sessions, "interval", hours=1,   id="clean_sessions")
+    scheduler.add_job(clean_expired_otps,     "interval", hours=1,   id="clean_otps")
+    scheduler.add_job(generate_report,        "interval", hours=2,   id="report")
     scheduler.start()
     logger.success("Scheduler démarré | nettoyage sessions/OTP toutes les heures | rapport toutes les 2h")
-def clean_expired_sessions():
-    db = SessionLocal()
-    deleted = db.query(SessionModel).filter(
-        SessionModel.expires_at < datetime.utcnow()
-    ).delete()
-    db.commit()
-    db.close()
-    logger.info(f"Sessions expirées supprimées : {deleted}")

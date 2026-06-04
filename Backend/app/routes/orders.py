@@ -212,11 +212,17 @@ def upload_screenshot(
 def get_my_orders(
     db: Session = Depends(get_db),
     user: User  = Depends(get_current_user),
+    limit: int  = 50,
+    offset: int = 0,
 ):
+    """Retourne les commandes de l'utilisateur, les plus récentes d'abord.
+    Paramètres : limit (défaut 50, max 100), offset pour la pagination."""
     return (
         db.query(Order)
         .filter(Order.user_id == user.id)
         .order_by(Order.created_at.desc())
+        .limit(min(limit, 100))
+        .offset(offset)
         .all()
     )
 

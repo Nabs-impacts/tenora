@@ -218,9 +218,14 @@ def me(request: Request, response: Response, db: Session = Depends(get_db)):
         raise HTTPException(status_code=401, detail="Compte introuvable. Veuillez vous reconnecter.")
 
     cookie_max_age = 7 * 24 * 60 * 60
-    session.expires_at = datetime.utcnow() + timedelta(seconds=cookie_max_age)
-    db.commit()
-    _set_session_cookie(response, session_id, cookie_max_age)
+
+    # ─── Optimisation DB : on ne renouvelle la session que si elle expire dans
+    # moins de 24h. Évite un UPDATE inutile à chaque vérification d'auth. ──────
+    time_left = (session.expires_at - datetime.utcnow()).total_seconds()
+    if time_left < 86400:
+        session.expires_at = datetime.utcnow() + timedelta(seconds=cookie_max_age)
+        db.commit()
+        _set_session_cookie(response, session_id, cookie_max_age)
 
     logger.info(f"Accès /me | user_id={user.id} | email={user.email}")
     return _user_session_payload(user, session_id)

@@ -64,6 +64,16 @@ DEFAULT_ANNOUNCEMENT = {"enabled": False, "text": ""}
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
 
+def get_all_settings(db: Any) -> dict:
+    """
+    Charge TOUS les paramètres du site en UNE SEULE requête DB.
+    À utiliser à la place de N appels get_setting() successifs.
+    """
+    from app.models.site_settings import SiteSettings
+    rows = db.query(SiteSettings).all()
+    return {row.setting_key: row.value for row in rows}
+
+
 def get_setting(db: Any, key: str, default: Any = None) -> Any:
     from app.models.site_settings import SiteSettings
     row = db.query(SiteSettings).filter(SiteSettings.setting_key == key).first()
