@@ -1480,3 +1480,38 @@ def delete_coupon(
     db.delete(coupon)
     db.commit()
     return {"status": "ok"}
+
+
+# ─── SSE — Stream de notifications admin ──────────────────────────────────────
+
+@router.get("/stream")
+async def sse_admin_stream(
+    admin: User = Depends(get_admin_user),
+):
+    """
+    Endpoint SSE : garde une connexion ouverte par admin connecté.
+    Le frontend s'y connecte via EventSource dès que l'admin est authentifié.
+
+    Auth : Bearer token OU cookie session_id OU ?access_token=<token>
+    (tous supportés par get_admin_user → _session_id_from_request)
+
+    Headers de réponse :
+      - X-Accel-Buffering: no  → désactive le buffering Nginx (CRITIQUE)
+      - Cache-Control: no-cache → pas de mise en cache proxy
+    """
+    from app.services.sse_manager import subscribe, event_stream
+
+    client_id, queue = await subscribe()
+
+    return StreamingResponse(
+        event_stream(queue, client_id),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control":     "no-cache",
+            "X-Accel-Buffering": "no",
+            "Connection":        "keep-alive",
+            # Ne pas forcer Access-Control-Allow-Origin ici :
+            # le CORSMiddleware de main.py gère déjà les headers CORS
+            # avec l'origine exacte du client (requis pour les credentials).
+        },
+    )

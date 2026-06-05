@@ -6,6 +6,22 @@ import { Navigate, Outlet, useLocation } from "react-router-dom";
 import { useAuthStore } from "@/lib/stores/auth";
 import { Sidebar } from "./Sidebar";
 import { Topbar } from "./Topbar";
+import { useOrderNotifications } from "@/hooks/useOrderNotifications";
+import { NotificationPermissionBanner } from "./NotificationPermissionBanner";
+
+const SSE_LABEL: Record<string, string> = {
+  idle:       "SSE INACTIF",
+  connecting: "SSE ...",
+  connected:  "SSE LIVE",
+  error:      "SSE ERREUR",
+};
+
+const SSE_DOT_CLASS: Record<string, string> = {
+  idle:       "bg-muted-foreground",
+  connecting: "bg-warning animate-pulse",
+  connected:  "bg-success animate-pulse-glow",
+  error:      "bg-destructive",
+};
 
 export function PanelLayout() {
   const { isLoggedIn, ready, fetchMe } = useAuthStore();
@@ -13,9 +29,10 @@ export function PanelLayout() {
   const [drawerOpen, setDrawerOpen] = useState(false);
 
   useEffect(() => { fetchMe(); }, [fetchMe]);
-
-  // Ferme le drawer à chaque navigation pour éviter qu'il reste ouvert
   useEffect(() => { setDrawerOpen(false); }, [location.pathname]);
+
+  // Notifications SSE — expose le statut de connexion pour le footer
+  const { sseStatus } = useOrderNotifications();
 
   if (!ready) {
     return (
@@ -36,15 +53,25 @@ export function PanelLayout() {
         <Topbar drawerOpen={drawerOpen} onDrawerToggle={setDrawerOpen} />
         <main className="flex-1 px-3 py-4 sm:p-6 lg:p-8 pb-8 relative z-10">
           <div className="max-w-[1500px] mx-auto">
+            <NotificationPermissionBanner />
             <Outlet />
           </div>
         </main>
         <footer className="hidden lg:flex border-t-2 border-border px-6 py-3 text-[10px] mono uppercase tracking-[0.2em] text-muted-foreground items-center justify-between">
           <span>TENORA // PANEL v1.0</span>
-          <span className="flex items-center gap-2">
-            <span className="status-dot bg-success text-success" />
-            SYSTEM ONLINE
-          </span>
+          <div className="flex items-center gap-4">
+            {/* Indicateur statut SSE */}
+            <span className="flex items-center gap-1.5">
+              <span className={`status-dot ${SSE_DOT_CLASS[sseStatus] ?? "bg-muted-foreground"}`} />
+              <span className={sseStatus === "connected" ? "text-success" : sseStatus === "error" ? "text-destructive" : ""}>
+                {SSE_LABEL[sseStatus]}
+              </span>
+            </span>
+            <span className="flex items-center gap-2">
+              <span className="status-dot bg-success text-success" />
+              SYSTEM ONLINE
+            </span>
+          </div>
         </footer>
       </div>
     </div>

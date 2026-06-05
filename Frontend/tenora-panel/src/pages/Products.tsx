@@ -416,16 +416,36 @@ export default function Products() {
                   <p className="text-xs text-muted-foreground mono">// Aucun champ supplémentaire</p>
                 )}
                 {form.required_fields.map((rf, i) => (
-                  <div key={i} className="grid grid-cols-1 sm:grid-cols-[1fr_1fr_auto_auto] gap-2 items-center border-2 border-border p-2">
-                    <Input placeholder="key (ex: phone)" value={rf.key} onChange={(e) => updateField(i, { key: e.target.value })} className="rounded-none border-2 mono text-xs h-8" />
-                    <Input placeholder="Label (ex: Téléphone)" value={rf.label} onChange={(e) => updateField(i, { label: e.target.value })} className="rounded-none border-2 mono text-xs h-8" />
-                    <label className="flex items-center gap-1 mono text-[10px] uppercase tracking-wider">
-                      <Switch checked={rf.required ?? true} onCheckedChange={(v) => updateField(i, { required: v })} />
-                      Req
-                    </label>
-                    <Button type="button" size="icon" variant="ghost" className="h-8 w-8 rounded-none hover:bg-destructive hover:text-destructive-foreground" onClick={() => removeField(i)}>
-                      <Trash2 className="h-3.5 w-3.5" />
-                    </Button>
+                  <div key={i} className="border-2 border-border p-2 space-y-2">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                      <Input
+                        placeholder="key (ex: phone)"
+                        value={rf.key}
+                        onChange={(e) => updateField(i, { key: e.target.value })}
+                        className="rounded-none border-2 mono text-xs h-8"
+                      />
+                      <Input
+                        placeholder="Label (ex: Téléphone)"
+                        value={rf.label}
+                        onChange={(e) => updateField(i, { label: e.target.value })}
+                        className="rounded-none border-2 mono text-xs h-8"
+                      />
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <Input
+                        placeholder="Placeholder (ex: +227 XX XX XX XX)"
+                        value={rf.placeholder || ""}
+                        onChange={(e) => updateField(i, { placeholder: e.target.value || undefined })}
+                        className="rounded-none border-2 mono text-xs h-8 flex-1"
+                      />
+                      <label className="flex items-center gap-1 mono text-[10px] uppercase tracking-wider shrink-0">
+                        <Switch checked={rf.required ?? true} onCheckedChange={(v) => updateField(i, { required: v })} />
+                        Req
+                      </label>
+                      <Button type="button" size="icon" variant="ghost" className="h-8 w-8 rounded-none hover:bg-destructive hover:text-destructive-foreground shrink-0" onClick={() => removeField(i)}>
+                        <Trash2 className="h-3.5 w-3.5" />
+                      </Button>
+                    </div>
                   </div>
                 ))}
               </div>

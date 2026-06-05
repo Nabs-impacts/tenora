@@ -146,6 +146,20 @@ def create_order(
     db.commit()
     db.refresh(order)
 
+    # ── Notification SSE → admins connectés en temps réel ─────────────────
+    try:
+        from app.services.sse_manager import notify_new_order
+        notify_new_order({
+            "id":             order.id,
+            "product_name":   product.name,
+            "user_email":     user.email,
+            "total_price":    float(order.total_price),
+            "payment_method": order.payment_method or "",
+            "quantity":       order.quantity,
+        })
+    except Exception as _sse_err:
+        logger.warning(f"[SSE] notify_new_order failed (non-bloquant) | {_sse_err}")
+
     logger.success(
         f"Commande créée | order_id={order.id} | user_id={user.id} "
         f"| product_id={product.id} | total={final_total} | discount={discount_amount} "

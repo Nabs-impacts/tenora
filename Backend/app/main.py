@@ -1,3 +1,4 @@
+import asyncio
 import os
 import sys
 import time
@@ -57,6 +58,11 @@ if not settings.DEBUG and settings.SENTRY_DSN:
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    # get_running_loop() est la seule façon correcte de récupérer la boucle
+    # depuis un contexte async (get_event_loop() est déprécié en Python 3.10+
+    # et peut retourner une boucle incorrecte ou lever RuntimeError en 3.12+).
+    from app.services.sse_manager import init_loop
+    init_loop(asyncio.get_running_loop())
     start_scheduler()
     logger.info(f"{settings.APP_NAME} v{settings.APP_VERSION} démarré | env={settings.ENVIRONMENT}")
     yield

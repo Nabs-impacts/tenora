@@ -1,5 +1,5 @@
 import { useEffect, useState, useCallback } from "react";
-import { Search, Users as UsersIcon, Shield, AtSign } from "lucide-react";
+import { Search, Users as UsersIcon, Shield, AtSign, Hash } from "lucide-react";
 import { PageHeader } from "@/components/panel/PageHeader";
 import { DataCard, DataCardHeader, DataCardContent } from "@/components/panel/DataCard";
 import { SkeletonRow } from "@/components/panel/PanelSkeletons";
@@ -33,7 +33,6 @@ export default function Users() {
 
   const fmtDate = (d: string) =>
     new Date(d).toLocaleDateString("fr-FR", { day: "2-digit", month: "short", year: "numeric" });
-  const fmt = (n: number) => `${n?.toLocaleString("fr-FR")} F`;
 
   return (
     <div className="space-y-6 animate-fade-up">
@@ -89,6 +88,15 @@ export default function Users() {
                         {u.email}
                       </p>
 
+                      {/* ID utilisateur */}
+                      <span
+                        className="chip border-border text-muted-foreground/70 mono"
+                        title="ID utilisateur"
+                      >
+                        <Hash className="h-2.5 w-2.5" />
+                        {u.id}
+                      </span>
+
                       {/* Pseudo en chip à côté de l'email */}
                       {u.username ? (
                         <span
@@ -123,10 +131,6 @@ export default function Users() {
                     <div className="text-right">
                       <p className="eyebrow" style={{ color: "hsl(var(--muted-foreground))" }}>CMD</p>
                       <p className="mono text-sm font-bold">{u.order_count || 0}</p>
-                    </div>
-                    <div className="hidden sm:block text-right">
-                      <p className="eyebrow" style={{ color: "hsl(var(--muted-foreground))" }}>TOTAL</p>
-                      <p className="mono text-sm font-bold text-primary">{fmt(u.total_spent || 0)}</p>
                     </div>
                   </div>
                 </div>

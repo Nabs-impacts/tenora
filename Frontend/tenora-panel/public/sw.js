@@ -64,3 +64,29 @@ self.addEventListener("fetch", (event) => {
     );
   }
 });
+
+// ─── Notification click → focus panel + navigation /orders ────────────────────
+// Déclenché quand l'admin clique sur une notification native (Android/desktop).
+
+self.addEventListener("notificationclick", (event) => {
+  event.notification.close();
+
+  event.waitUntil(
+    clients
+      .matchAll({ type: "window", includeUncontrolled: true })
+      .then((clientList) => {
+        // Si une fenêtre du panel est déjà ouverte → la focus et naviguer
+        for (const client of clientList) {
+          if (client.url.includes(self.location.origin) && "focus" in client) {
+            client.focus();
+            client.navigate(self.location.origin + "/orders");
+            return;
+          }
+        }
+        // Sinon ouvrir une nouvelle fenêtre directement sur /orders
+        if (clients.openWindow) {
+          return clients.openWindow("/orders");
+        }
+      })
+  );
+});

@@ -612,7 +612,8 @@ def stats_customers(
     new_per_day     = [{"date": _day_str(r.day), "new_users": int(r.new_users)} for r in new_per_day_rows]
 
     # Commandes groupées par user (pour retention + top customers)
-    # Un seul JOIN Orders → Users
+    # Seules les commandes COMPLÉTÉES sont prises en compte — les pending/rejected
+    # fausseraient le classement et le CA réel de chaque client.
     top_rows = db.query(
         User.email,
         func.count(Order.id).label("orders_count"),
@@ -621,7 +622,8 @@ def stats_customers(
     ).join(
         User, User.id == Order.user_id
     ).filter(
-        Order.created_at.between(start, end)
+        Order.created_at.between(start, end),
+        Order.status == OrderStatus.completed,
     ).group_by(Order.user_id, User.email).order_by(
         func.sum(Order.total_price).desc()
     ).all()
