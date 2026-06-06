@@ -206,6 +206,7 @@ export interface PaymentMethod {
 }
 export interface SiteInit {
   maintenance: boolean;
+  maintenance_message: string;
   announcement: { enabled: boolean; text: string };
   payment_methods: PaymentMethod[];
   whatsapp_number: string;

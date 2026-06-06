@@ -81,6 +81,7 @@ class ImportStatusUpdate(BaseModel):
 
 class SettingMaintenance(BaseModel):
     enabled: bool
+    message: str = ""
 
 class SettingAnnouncement(BaseModel):
     enabled: bool
@@ -1224,15 +1225,26 @@ def get_settings(
     db:    Session = Depends(get_db),
     admin: User    = Depends(get_admin_user),
 ):
-    maintenance     = get_setting(db, "maintenance_mode", False)
+    raw_maintenance = get_setting(db, "maintenance_mode", {"enabled": False, "message": ""})
     announcement    = get_setting(db, "announcement", DEFAULT_ANNOUNCEMENT)
     payment_methods = get_setting(db, "payment_methods", DEFAULT_PAYMENT_METHODS)
     whatsapp_number = get_setting(db, "whatsapp_number", settings.WHATSAPP_NUMBER or "")
-    featured_ids   = get_setting(db, "featured_product_ids", [])
+    featured_ids    = get_setting(db, "featured_product_ids", [])
     if not isinstance(featured_ids, list):
         featured_ids = []
+    # Compat : ancienne valeur stockée comme bool simple
+    if isinstance(raw_maintenance, bool):
+        maint_enabled  = raw_maintenance
+        maint_message  = ""
+    elif isinstance(raw_maintenance, dict):
+        maint_enabled  = bool(raw_maintenance.get("enabled", False))
+        maint_message  = str(raw_maintenance.get("message", "")).strip()
+    else:
+        maint_enabled  = False
+        maint_message  = ""
     return {
-        "maintenance":          bool(maintenance),
+        "maintenance":          maint_enabled,
+        "maintenance_message":  maint_message,
         "announcement":         announcement,
         "payment_methods":      payment_methods,
         "whatsapp_number":      whatsapp_number,
@@ -1246,7 +1258,10 @@ def update_maintenance(
     db:    Session = Depends(get_db),
     admin: User    = Depends(get_admin_user),
 ):
-    set_setting(db, "maintenance_mode", data.enabled)
+    set_setting(db, "maintenance_mode", {
+        "enabled": data.enabled,
+        "message": data.message.strip(),
+    })
     invalidate_site_cache()
     label = "activé" if data.enabled else "désactivé"
     logger.info(f"Mode maintenance {label} | admin_id={admin.id}")

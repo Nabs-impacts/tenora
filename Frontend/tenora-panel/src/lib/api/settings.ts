@@ -1,8 +1,8 @@
 import api from "./client";
 
 export const getSettings = () => api.get("/panel/settings");
-export const updateMaintenance = (enabled: boolean) =>
-  api.put("/panel/settings/maintenance", { enabled });
+export const updateMaintenance = (data: { enabled: boolean; message: string }) =>
+  api.put("/panel/settings/maintenance", data);
 export const updateAnnouncement = (data: { enabled: boolean; text: string }) =>
   api.put("/panel/settings/announcement", data);
 export const updateWhatsapp = (number: string) =>

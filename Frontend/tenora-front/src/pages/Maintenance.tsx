@@ -4,11 +4,10 @@ import { TenoraLogo } from "@/components/brand/TenoraLogo";
 import { useSite } from "@/context/SiteContext";
 
 export default function Maintenance() {
-  const { refresh } = useSite();
+  const { data, refresh } = useSite();
   const [checking, setChecking] = useState(false);
 
-  // La détection automatique de fin de maintenance est gérée par le refetchInterval
-  // configuré dans SiteContext (60s). Inutile d'en rajouter un ici.
+  const customMessage = data?.maintenance_message?.trim() || "";
 
   const handleCheck = async () => {
     setChecking(true);
@@ -41,12 +40,23 @@ export default function Maintenance() {
         </h1>
 
         <div className="border-2 border-foreground bg-card p-5 sm:p-6 shadow-[6px_6px_0_0_hsl(var(--foreground))] mb-6 text-left">
-          <p className="text-sm sm:text-base font-medium leading-relaxed">
-            Nous mettons à jour la boutique pour vous offrir une meilleure expérience.
-          </p>
-          <p className="text-sm sm:text-base font-medium leading-relaxed mt-2">
-            <span className="font-bold uppercase tracking-wider">Nous serons de retour le plus vite possible.</span> Merci de votre patience.
-          </p>
+          {customMessage ? (
+            /* ── Message personnalisé depuis le panel ── */
+            <p className="text-sm sm:text-base font-medium leading-relaxed whitespace-pre-line">
+              {customMessage}
+            </p>
+          ) : (
+            /* ── Message par défaut ── */
+            <>
+              <p className="text-sm sm:text-base font-medium leading-relaxed">
+                Nous mettons à jour la boutique pour vous offrir une meilleure expérience.
+              </p>
+              <p className="text-sm sm:text-base font-medium leading-relaxed mt-2">
+                <span className="font-bold uppercase tracking-wider">Nous serons de retour le plus vite possible.</span>{" "}
+                Merci de votre patience.
+              </p>
+            </>
+          )}
         </div>
 
         <button

@@ -65,11 +65,22 @@ def _build_site_data(db: Session) -> dict:
     # ─── 1 seule requête DB au lieu de 5 get_setting() séquentiels ────────
     s = get_all_settings(db)
 
-    maintenance     = s.get("maintenance_mode", False)
+    raw_maintenance = s.get("maintenance_mode", {"enabled": False, "message": ""})
     announcement    = s.get("announcement", DEFAULT_ANNOUNCEMENT)
     payment_methods = s.get("payment_methods", DEFAULT_PAYMENT_METHODS)
     featured_ids    = s.get("featured_product_ids", [])
     whatsapp_number = s.get("whatsapp_number", "") or ""
+
+    # Compat : ancienne valeur stockée comme bool simple
+    if isinstance(raw_maintenance, bool):
+        maintenance_enabled = raw_maintenance
+        maintenance_message = ""
+    elif isinstance(raw_maintenance, dict):
+        maintenance_enabled = bool(raw_maintenance.get("enabled", False))
+        maintenance_message = str(raw_maintenance.get("message", "")).strip()
+    else:
+        maintenance_enabled = False
+        maintenance_message = ""
 
     active_methods = [m for m in payment_methods if m.get("enabled", True)]
 
@@ -82,7 +93,8 @@ def _build_site_data(db: Session) -> dict:
     ]
 
     return {
-        "maintenance":          bool(maintenance),
+        "maintenance":          maintenance_enabled,
+        "maintenance_message":  maintenance_message,
         "announcement":         announcement if isinstance(announcement, dict) else DEFAULT_ANNOUNCEMENT,
         "payment_methods":      active_methods,
         "featured_product_ids": featured_ids,
@@ -133,18 +145,30 @@ def public_settings(response: Response, db: Session = Depends(get_db)):
     """
     cached = _cache_get("site_init")
     if cached is not None:
-        partial = {"maintenance": cached["maintenance"], "announcement": cached["announcement"]}
+        partial = {
+            "maintenance":         cached["maintenance"],
+            "maintenance_message": cached.get("maintenance_message", ""),
+            "announcement":        cached["announcement"],
+        }
         _set_cache_headers(response, partial)
         return partial
 
     # Fallback sans cache : on batch quand même les settings en 1 requête
     s = get_all_settings(db)
-    maintenance  = s.get("maintenance_mode", False)
+    raw_maintenance = s.get("maintenance_mode", {"enabled": False, "message": ""})
+    if isinstance(raw_maintenance, bool):
+        maint_enabled, maint_message = raw_maintenance, ""
+    elif isinstance(raw_maintenance, dict):
+        maint_enabled = bool(raw_maintenance.get("enabled", False))
+        maint_message = str(raw_maintenance.get("message", "")).strip()
+    else:
+        maint_enabled, maint_message = False, ""
     announcement = s.get("announcement", DEFAULT_ANNOUNCEMENT)
 
     partial = {
-        "maintenance":  bool(maintenance),
-        "announcement": announcement if isinstance(announcement, dict) else DEFAULT_ANNOUNCEMENT,
+        "maintenance":         maint_enabled,
+        "maintenance_message": maint_message,
+        "announcement":        announcement if isinstance(announcement, dict) else DEFAULT_ANNOUNCEMENT,
     }
     _set_cache_headers(response, partial)
     return partial

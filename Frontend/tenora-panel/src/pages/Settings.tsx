@@ -41,6 +41,7 @@ const TABS = [
 export default function SettingsPage() {
   const [loading, setLoading] = useState(true);
   const [maintenance, setMaintenance] = useState(false);
+  const [maintenanceMessage, setMaintenanceMessage] = useState("");
   const [whatsapp, setWhatsapp] = useState("");
   const [announcement, setAnnouncement] = useState({ enabled: false, text: "" });
   const [pms, setPms] = useState<PM[]>(
@@ -53,6 +54,7 @@ export default function SettingsPage() {
       try {
         const { data } = await getSettings();
         setMaintenance(data.maintenance ?? false);
+        setMaintenanceMessage(data.maintenance_message ?? "");
         setAnnouncement({ enabled: data.announcement?.enabled ?? false, text: data.announcement?.text ?? "" });
         setWhatsapp(data.whatsapp_number ?? "");
         if (Array.isArray(data.payment_methods)) {
@@ -71,7 +73,13 @@ export default function SettingsPage() {
 
   const saveMaintenance = async (v: boolean) => {
     setMaintenance(v); setSaving((s) => ({ ...s, m: true }));
-    try { await updateMaintenance(v); toast.success("Maintenance mise a jour"); }
+    try { await updateMaintenance({ enabled: v, message: maintenanceMessage }); toast.success("Maintenance mise a jour"); }
+    catch { toast.error("Erreur"); }
+    finally { setSaving((s) => ({ ...s, m: false })); }
+  };
+  const saveMaintenanceMessage = async () => {
+    setSaving((s) => ({ ...s, m: true }));
+    try { await updateMaintenance({ enabled: maintenance, message: maintenanceMessage }); toast.success("Message mis a jour"); }
     catch { toast.error("Erreur"); }
     finally { setSaving((s) => ({ ...s, m: false })); }
   };
@@ -148,8 +156,8 @@ export default function SettingsPage() {
 
         {/* ── Maintenance ── */}
         <TabsContent value="maintenance">
-          <div className="brackets brut-card max-w-2xl p-5 sm:p-6">
-            <div className="flex items-start gap-4 mb-6">
+          <div className="brackets brut-card max-w-2xl p-5 sm:p-6 space-y-5">
+            <div className="flex items-start gap-4">
               <div className="h-10 w-10 shrink-0 border-2 border-destructive/40 bg-destructive-soft flex items-center justify-center text-destructive">
                 <Wrench className="h-5 w-5" />
               </div>
@@ -158,17 +166,46 @@ export default function SettingsPage() {
                 <p className="text-sm text-muted-foreground">Affiche une page de maintenance sur le shop public.</p>
               </div>
             </div>
+
+            {/* Toggle on/off */}
             <div className="flex items-center gap-3 border-2 border-border p-3">
               <Switch checked={maintenance} onCheckedChange={saveMaintenance} disabled={saving.m} />
               <span className={cn("mono text-sm", maintenance ? "text-destructive" : "text-success")}>
                 {maintenance ? "// MAINTENANCE ACTIVE" : "// SHOP EN LIGNE"}
               </span>
             </div>
+
             {maintenance && (
-              <div className="mt-3 flex items-center gap-2 border-2 border-destructive/40 bg-destructive-soft p-3 text-xs text-destructive mono">
+              <div className="flex items-center gap-2 border-2 border-destructive/40 bg-destructive-soft p-3 text-xs text-destructive mono">
                 <AlertTriangle className="h-4 w-4 shrink-0" /> Boutique inaccessible aux visiteurs
               </div>
             )}
+
+            {/* Message personnalisé */}
+            <div className="border-t-2 border-border pt-5 space-y-3">
+              <div>
+                <Label className="mono text-xs uppercase tracking-wider block mb-1">
+                  Message affiché aux visiteurs
+                </Label>
+                <p className="text-[10px] text-muted-foreground mono mb-2">
+                  // Laisser vide = message par défaut affiché
+                </p>
+                <Textarea
+                  rows={4}
+                  value={maintenanceMessage}
+                  onChange={(e) => setMaintenanceMessage(e.target.value)}
+                  placeholder={"Ex: Mise à jour en cours, retour prévu dans 30 minutes.\nMerci de votre patience !"}
+                  className="rounded-none border-2 mono text-sm resize-none"
+                />
+              </div>
+              <Button
+                onClick={saveMaintenanceMessage}
+                disabled={saving.m}
+                className="w-full sm:w-auto rounded-none border-2 border-primary bg-primary text-primary-foreground mono uppercase tracking-wider hover:bg-primary/90 h-11"
+              >
+                {saving.m ? "..." : "Enregistrer le message"}
+              </Button>
+            </div>
           </div>
         </TabsContent>
 
