@@ -1,10 +1,12 @@
 import { useState } from "react";
-import { useNavigate, useParams, Link } from "react-router-dom";
+import { useNavigate, useParams, useSearchParams, Link } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import {
   ArrowLeft,
   Check,
   Loader2,
+  Minus,
+  Plus,
   Upload,
   ShieldCheck,
   Zap,
@@ -48,6 +50,7 @@ function cleanDescription(text: string | null | undefined): string {
 export default function ProductPage() {
   const { id } = useParams();
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const { user } = useAuth();
   const { data: site } = useSite();
   const productId = Number(id);
@@ -60,7 +63,11 @@ export default function ProductPage() {
     gcTime: 10 * 60_000,
   });
 
-  const [fields, setFields] = useState<Record<string, string>>({});
+  // ─── Quantity ──────────────────────────────────────────
+  const initialQty = Math.max(1, parseInt(searchParams.get("qty") || "1", 10));
+  const [quantity, setQuantity] = useState(initialQty);
+
+  const [fields, setFields] = useState<Record<string, string>>({}); 
   const [paymentMethod, setPaymentMethod] = useState<string>("");
   const [creating, setCreating] = useState(false);
   const [order, setOrder] = useState<Order | null>(null);
@@ -108,11 +115,23 @@ export default function ProductPage() {
   }
 
   const basePrice = product.final_price ?? product.price;
-  const finalTotal = coupon
+  const unitTotal = coupon
     ? coupon.final_total ??
       coupon.final_price ??
       Math.max(0, basePrice - (coupon.discount_amount || 0))
     : basePrice;
+  const finalTotal = unitTotal * quantity;
+  const maxQty = product.stock > 0 ? product.stock : 99;
+
+  // Reset coupon when quantity changes (needs re-validation)
+  const handleQuantityChange = (newQty: number) => {
+    const clamped = Math.min(maxQty, Math.max(1, newQty));
+    setQuantity(clamped);
+    if (coupon) {
+      removeCoupon();
+      toast.info("Quantité modifiée — veuillez revalider votre code promo.");
+    }
+  };
 
   const validateFields = () => {
     if (!product.required_fields) return true;
@@ -147,7 +166,7 @@ export default function ProductPage() {
       const r = await couponsApi.validate({
         code,
         product_id: product.id,
-        quantity: 1,
+        quantity,
       });
       if (!r.data.valid) {
         setCouponError(r.data.reason || r.data.message || "Code promo invalide.");
@@ -205,7 +224,7 @@ export default function ProductPage() {
     try {
       const r = await ordersApi.create({
         product_id: product.id,
-        quantity: 1,
+        quantity,
         customer_info: fields,
         payment_method: paymentMethod,
         coupon_code: coupon?.code,
@@ -320,29 +339,73 @@ export default function ProductPage() {
               })()}
           </div>
 
-          <div className="flex items-baseline gap-3 flex-wrap">
-            <span className="font-display text-3xl md:text-4xl font-bold gradient-text">
-              {formatXOF(finalTotal)}
-            </span>
-            {coupon ? (
-              <>
-                <span className="text-muted-foreground line-through">
-                  {formatXOF(basePrice)}
+          <div className="space-y-1">
+            {/* Prix unitaire — toujours affiché */}
+            <div className="flex items-baseline gap-3 flex-wrap">
+              <span className="font-display text-3xl md:text-4xl font-bold gradient-text">
+                {formatXOF(unitTotal)}
+              </span>
+              {coupon ? (
+                <>
+                  <span className="text-muted-foreground line-through">
+                    {formatXOF(basePrice)}
+                  </span>
+                  <span className="chip bg-success text-success-foreground font-bold">
+                    -{formatXOF(coupon.discount_amount)}
+                  </span>
+                </>
+              ) : product.discount_percent ? (
+                <>
+                  <span className="text-muted-foreground line-through">
+                    {formatXOF(product.price)}
+                  </span>
+                  <span className="chip bg-destructive text-destructive-foreground font-bold">
+                    -{product.discount_percent}%
+                  </span>
+                </>
+              ) : null}
+            </div>
+            {/* Total dynamique — visible seulement si qty > 1 */}
+            {quantity > 1 && (
+              <div className="flex items-baseline gap-2">
+                <span className="text-sm text-muted-foreground font-mono">
+                  ×{quantity} =
                 </span>
-                <span className="chip bg-success text-success-foreground font-bold">
-                  -{formatXOF(coupon.discount_amount)}
+                <span className="font-display text-2xl font-bold gradient-text tabular-nums">
+                  {formatXOF(finalTotal)}
                 </span>
-              </>
-            ) : product.discount_percent ? (
-              <>
-                <span className="text-muted-foreground line-through">
-                  {formatXOF(product.price)}
-                </span>
-                <span className="chip bg-destructive text-destructive-foreground font-bold">
-                  -{product.discount_percent}%
-                </span>
-              </>
-            ) : null}
+              </div>
+            )}
+          </div>
+
+
+          {/* ── Quantité ──────────────────────────────────────── */}
+          <div className="flex items-center gap-3">
+            <span className="text-sm font-semibold text-muted-foreground">Quantité</span>
+            <div className="flex items-center gap-0 border-2 border-border">
+              <button
+                type="button"
+                onClick={() => handleQuantityChange(quantity - 1)}
+                disabled={quantity <= 1}
+                aria-label="Diminuer"
+                className="size-9 flex items-center justify-center text-foreground hover:bg-muted disabled:opacity-30 disabled:cursor-not-allowed transition-colors border-r-2 border-border"
+              >
+                <Minus className="size-3.5" />
+              </button>
+              <span className="min-w-[2.5rem] text-center font-mono font-bold text-base tabular-nums px-1">
+                {quantity}
+              </span>
+              <button
+                type="button"
+                onClick={() => handleQuantityChange(quantity + 1)}
+                disabled={quantity >= maxQty}
+                aria-label="Augmenter"
+                className="size-9 flex items-center justify-center text-foreground hover:bg-muted disabled:opacity-30 disabled:cursor-not-allowed transition-colors border-l-2 border-border"
+              >
+                <Plus className="size-3.5" />
+              </button>
+            </div>
+
           </div>
 
           <div className="card-elev p-4 md:p-5 space-y-4">
@@ -577,23 +640,28 @@ export default function ProductPage() {
                 )}
 
                 {/* CTA inline desktop uniquement — mobile a la sticky CTA */}
-                <Button
-                  onClick={handleCreate}
-                  disabled={creating}
-                  size="lg"
-                  className="hidden md:flex w-full h-12 bg-gradient-primary text-primary-foreground hover:opacity-90 shadow-glow"
-                >
-                  {creating ? (
-                    <Loader2 className="size-4 animate-spin" />
-                  ) : product.whatsapp_redirect ? (
-                    <MessageCircle className="size-4" />
-                  ) : (
-                    <Zap className="size-4" />
-                  )}
-                  {product.whatsapp_redirect
-                    ? "Continuer sur WhatsApp"
-                    : "Commander maintenant"}
-                </Button>
+                <div className="hidden md:block w-full brut-btn-shadow group">
+                  <button
+                    type="button"
+                    onClick={handleCreate}
+                    disabled={creating}
+                    className="relative w-full h-12 bg-primary text-primary-foreground border-2 border-primary px-6 flex items-center justify-center gap-3 font-display text-xl uppercase tracking-wider transition-colors hover:bg-background hover:text-primary disabled:opacity-40 disabled:cursor-not-allowed"
+                  >
+                    {creating ? (
+                      <Loader2 className="size-4 animate-spin" />
+                    ) : product.whatsapp_redirect ? (
+                      <MessageCircle className="size-4" />
+                    ) : (
+                      <Zap className="size-4" />
+                    )}
+                    {product.whatsapp_redirect
+                      ? "Continuer sur WhatsApp"
+                      : "Commander maintenant"}
+                    {!creating && (
+                      <span className="size-2.5 bg-primary-foreground group-hover:bg-primary animate-blink ml-1 shrink-0" />
+                    )}
+                  </button>
+                </div>
               </>
             ) : (
               <>
@@ -640,7 +708,7 @@ export default function ProductPage() {
                   onClick={handleUpload}
                   disabled={!file || uploading}
                   size="lg"
-                  className="w-full h-12 bg-gradient-primary text-primary-foreground hover:opacity-90 shadow-glow"
+                  className="w-full h-12 bg-primary text-primary-foreground border-2 border-primary font-display text-xl uppercase tracking-wider hover:bg-background hover:text-primary transition-colors disabled:opacity-40 disabled:cursor-not-allowed rounded-none"
                 >
                   {uploading ? (
                     <Loader2 className="size-4 animate-spin" />
@@ -686,26 +754,23 @@ export default function ProductPage() {
                 Total
               </p>
               <p className="font-display text-xl font-bold gradient-text leading-tight truncate">
-                {formatXOF(finalTotal)}
+                {formatXOF(unitTotal)}
               </p>
             </div>
-            <Button
+            <button
+              type="button"
               onClick={handleCreate}
               disabled={creating}
-              className="h-12 px-5 bg-gradient-primary text-primary-foreground shadow-glow font-bold uppercase tracking-wider text-xs shrink-0"
+              className="h-12 px-5 bg-primary text-primary-foreground border-2 border-primary font-display uppercase tracking-wider text-base shrink-0 flex items-center gap-2 hover:bg-background hover:text-primary transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
             >
               {creating ? (
                 <Loader2 className="size-4 animate-spin" />
               ) : product.whatsapp_redirect ? (
-                <>
-                  <MessageCircle className="size-4" /> WhatsApp
-                </>
+                <><MessageCircle className="size-4" /> WhatsApp</>
               ) : (
-                <>
-                  <Zap className="size-4" /> Commander
-                </>
+                <><Zap className="size-4" /> Commander</>
               )}
-            </Button>
+            </button>
           </div>
         </div>
       )}

@@ -9,6 +9,7 @@ from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.gzip import GZipMiddleware
+from fastapi.middleware.gzip import GZipMiddleware as _GZipBase
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from loguru import logger
@@ -58,9 +59,6 @@ if not settings.DEBUG and settings.SENTRY_DSN:
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # get_running_loop() est la seule façon correcte de récupérer la boucle
-    # depuis un contexte async (get_event_loop() est déprécié en Python 3.10+
-    # et peut retourner une boucle incorrecte ou lever RuntimeError en 3.12+).
     from app.services.sse_manager import init_loop
     init_loop(asyncio.get_running_loop())
     start_scheduler()
@@ -113,10 +111,6 @@ async def unhandled_exception_handler(request: Request, exc: Exception):
 
 
 def _clean_pydantic_errors(errors: list) -> list:
-    """
-    Pydantic v2 inclut ctx.error comme objet Exception (non JSON-sérialisable).
-    On le convertit en string pour éviter le crash du JSONResponse.
-    """
     result = []
     for e in errors:
         clean = dict(e)
@@ -138,7 +132,6 @@ async def validation_exception_handler(request: Request, exc: RequestValidationE
     for e in sanitized:
         loc = " → ".join(str(l) for l in e.get("loc", []) if l != "body")
         msg = e.get("msg", "Valeur invalide")
-        # Pydantic v2 préfixe les ValueError avec "Value error, " — on le retire
         if msg.startswith("Value error, "):
             msg = msg[len("Value error, "):]
         messages.append(f"{loc} : {msg}" if loc else msg)
@@ -152,8 +145,6 @@ async def security_headers(request: Request, call_next):
     start_time = time.time()
     response = await call_next(request)
 
-    # Ignorer les preflight OPTIONS : pas de headers sécurité ni de log perf
-    # (4.4 — ne pas polluer les logs avec les requêtes OPTIONS du navigateur)
     if request.method == "OPTIONS":
         return response
 
@@ -171,7 +162,30 @@ async def security_headers(request: Request, call_next):
     return response
 
 
-app.add_middleware(GZipMiddleware, minimum_size=500, compresslevel=6)
+# ─── GZip sélectif — exclut les endpoints SSE ────────────────────────────────
+# GZipMiddleware bufferise les StreamingResponse avant envoi dans certaines
+# versions de Starlette, ce qui empêche le streaming SSE de fonctionner.
+# Sur mobile/Android, le décodage gzip à la volée pour EventSource est
+# non fiable. On contourne en excluant explicitement les endpoints SSE.
+
+class SelectiveGZipMiddleware(_GZipBase):
+    """GZip standard sauf pour les endpoints text/event-stream."""
+
+    # Chemins exacts à ne jamais compresser
+    _SSE_PATHS: frozenset[str] = frozenset({"/panel/stream"})
+
+    async def __call__(self, scope, receive, send):  # type: ignore[override]
+        if (
+            scope.get("type") == "http"
+            and scope.get("path", "") in self._SSE_PATHS
+        ):
+            # Bypass total : le StreamingResponse est envoyé tel quel
+            await self.app(scope, receive, send)
+        else:
+            await super().__call__(scope, receive, send)
+
+
+app.add_middleware(SelectiveGZipMiddleware, minimum_size=500, compresslevel=6)
 
 app.add_middleware(SessionMiddleware, secret_key=settings.SECRET_KEY, https_only=not settings.DEBUG, same_site="lax")
 app.add_middleware(

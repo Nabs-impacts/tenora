@@ -7,6 +7,12 @@ Architecture :
   - `notify_new_order()` est thread-safe : peut être appelé depuis une route
     synchrone FastAPI (qui tourne dans un threadpool executor)
   - `event_stream()` est le générateur async branché sur la StreamingResponse
+
+Fix :
+  - Commentaire SSE initial `: connected` envoyé immédiatement à la connexion.
+    Sans ça, les headers HTTP 200 sont retenus jusqu'au premier vrai événement
+    (jusqu'à 25 s si aucune commande), donc `EventSource.onopen` ne se déclenche
+    pas et le statut reste bloqué sur "connecting" côté panel.
 """
 
 import asyncio
@@ -80,10 +86,21 @@ def notify_new_order(order: dict) -> None:
 async def event_stream(queue: asyncio.Queue, client_id: str) -> AsyncGenerator[str, None]:
     """
     Générateur async branché sur la StreamingResponse.
-    Envoie un heartbeat toutes les HEARTBEAT_INTERVAL secondes pour que Nginx
-    ne coupe pas la connexion silencieusement (X-Accel-Buffering: no requis aussi).
+
+    - Envoie un commentaire SSE immédiatement pour forcer l'envoi des headers
+      HTTP 200 au navigateur. Sans ça, les middlewares (ex-GZip) ou le kernel
+      TCP peuvent retenir les headers jusqu'au premier vrai événement.
+      Résultat : `EventSource.onopen` se déclenche immédiatement.
+
+    - Envoie un heartbeat toutes les HEARTBEAT_INTERVAL secondes pour que Nginx
+      ne coupe pas la connexion silencieusement (X-Accel-Buffering: no requis).
     """
     try:
+        # ── Flush immédiat des headers HTTP ───────────────────────────────────
+        # Un commentaire SSE (ligne commençant par `:`) est ignoré par le
+        # browser mais force le flush de la réponse HTTP vers le client.
+        yield ": connected\n\n"
+
         while True:
             try:
                 data = await asyncio.wait_for(queue.get(), timeout=HEARTBEAT_INTERVAL)

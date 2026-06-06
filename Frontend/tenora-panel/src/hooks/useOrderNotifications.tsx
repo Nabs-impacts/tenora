@@ -118,6 +118,53 @@ function OrderToast({ order, onClose }: { order: OrderEvent; onClose: () => void
   );
 }
 
+// ─── Notification native — compatible PC + Android PWA ───────────────────────
+//
+// `new Notification()` fonctionne sur PC (page en foreground ou background).
+// Sur Android Chrome / PWA installée, `new Notification()` est BLOQUÉ par le
+// navigateur ; il faut obligatoirement passer par ServiceWorkerRegistration.
+// On tente d'abord le ServiceWorker (universel), puis le fallback direct.
+
+async function showSystemNotification(order: OrderEvent): Promise<void> {
+  if (!("Notification" in window)) return;
+  if (Notification.permission !== "granted") return;
+
+  const title = "// NOUVELLE COMMANDE";
+  const options: NotificationOptions = {
+    body:     `${order.product_name} — ${formatPrice(order.total_price)}`,
+    icon:     "/icons/icon-192.png",
+    badge:    "/icons/icon-192.png",
+    tag:      `tenora-order-${order.id}`,
+    renotify: false,
+  };
+
+  // Chemin 1 : via Service Worker (Android PWA + PC en arrière-plan)
+  // On utilise getRegistration() et NON serviceWorker.ready :
+  // .ready ne resolve jamais si aucun SW n'est enregistré (ex : mode dev,
+  // première visite), ce qui bloque la fonction et empêche le fallback.
+  if ("serviceWorker" in navigator) {
+    try {
+      const reg = await navigator.serviceWorker.getRegistration("/");
+      if (reg) {
+        await reg.showNotification(title, options);
+        return;
+      }
+      // Pas de SW actif → on tombe dans le fallback direct ci-dessous
+    } catch (err) {
+      // SW non dispo (ex : dev sans HTTPS) → fallback
+      console.warn("[SSE] SW notification failed, fallback direct:", err);
+    }
+  }
+
+  // Chemin 2 : fallback direct (PC, page active, sans SW)
+  try {
+    const notif = new Notification(title, options);
+    setTimeout(() => notif.close(), NOTIF_AUTO_CLOSE);
+  } catch (err) {
+    console.warn("[SSE] Direct notification failed:", err);
+  }
+}
+
 // ─── Hook principal ───────────────────────────────────────────────────────────
 
 export function useOrderNotifications(): { sseStatus: SSEStatus } {
@@ -143,27 +190,6 @@ export function useOrderNotifications(): { sseStatus: SSEStatus } {
     }
   }, []);
 
-  const showNativeNotif = useCallback((order: OrderEvent) => {
-    if (!("Notification" in window)) return;
-    if (Notification.permission !== "granted") {
-      console.warn("[SSE] Notif native bloquée — permission:", Notification.permission);
-      return;
-    }
-    const notif = new Notification("// NOUVELLE COMMANDE", {
-      body:     `${order.product_name} — ${formatPrice(order.total_price)}`,
-      icon:     "/icons/icon-192.png",
-      badge:    "/icons/icon-192.png",
-      tag:      `tenora-order-${order.id}`,
-      renotify: false,
-    });
-    notif.onclick = () => {
-      window.focus();
-      navigate("/orders");
-      notif.close();
-    };
-    setTimeout(() => notif.close(), NOTIF_AUTO_CLOSE);
-  }, [navigate]);
-
   const showToast = useCallback((order: OrderEvent) => {
     toast.custom(
       (t) => (
@@ -184,18 +210,28 @@ export function useOrderNotifications(): { sseStatus: SSEStatus } {
     try {
       const order: OrderEvent = JSON.parse(e.data);
       showToast(order);
-      showNativeNotif(order);
+      // Navigation si page en arrière-plan (ne change rien si déjà sur /orders)
+      showSystemNotification(order).catch(() => {});
     } catch (err) {
       console.error("[SSE] Erreur parsing new_order:", err);
     }
-  }, [showToast, showNativeNotif]);
+  }, [showToast]);
 
   const connect = useCallback(() => {
     if (!mountedRef.current || !isLoggedIn) return;
 
+    // Guard : ne pas ouvrir une deuxième connexion si l'une est déjà active
+    if (
+      esRef.current !== null &&
+      esRef.current.readyState !== EventSource.CLOSED
+    ) {
+      return;
+    }
+
     const token = localStorage.getItem(SESSION_TOKEN_KEY);
     if (!token) {
       console.warn("[SSE] Token introuvable dans localStorage, connexion annulée");
+      setSseStatus("error");
       return;
     }
 
@@ -213,8 +249,9 @@ export function useOrderNotifications(): { sseStatus: SSEStatus } {
     };
 
     es.addEventListener("new_order", handleNewOrder);
+
     es.addEventListener("ping", () => {
-      console.log("[SSE] ping reçu (keepalive)");
+      // Keepalive reçu — la connexion est vivante
     });
 
     es.onerror = (err) => {

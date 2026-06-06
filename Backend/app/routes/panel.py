@@ -4,7 +4,7 @@ import re
 import time as _time
 from datetime import datetime, timedelta
 
-from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile
+from fastapi import APIRouter, Depends, File, HTTPException, Query, Request, UploadFile
 from fastapi.responses import StreamingResponse
 from loguru import logger
 from pydantic import BaseModel
@@ -13,7 +13,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, joinedload
 
 from app.config import settings
-from app.database import get_db
+from app.database import SessionLocal, get_db
 
 # Cache dashboard 30 s — évite de re-requêter à chaque refresh admin
 _dashboard_cache: dict = {}
@@ -1485,20 +1485,41 @@ def delete_coupon(
 # ─── SSE — Stream de notifications admin ──────────────────────────────────────
 
 @router.get("/stream")
-async def sse_admin_stream(
-    admin: User = Depends(get_admin_user),
-):
+async def sse_admin_stream(request: Request):
     """
     Endpoint SSE : garde une connexion ouverte par admin connecté.
     Le frontend s'y connecte via EventSource dès que l'admin est authentifié.
 
     Auth : Bearer token OU cookie session_id OU ?access_token=<token>
-    (tous supportés par get_admin_user → _session_id_from_request)
+
+    IMPORTANT — Gestion de la DB :
+      On vérifie l'auth avec une session DB éphémère qu'on ferme IMMÉDIATEMENT
+      avant de démarrer le stream. Sans ça, chaque admin connecté maintient une
+      connexion SQL ouverte indéfiniment, ce qui épuise le pool de connexions.
 
     Headers de réponse :
       - X-Accel-Buffering: no  → désactive le buffering Nginx (CRITIQUE)
       - Cache-Control: no-cache → pas de mise en cache proxy
     """
+    from app.dependencies import _session_id_from_request, _resolve_user_from_session
+
+    # ── Auth inline avec session DB éphémère ──────────────────────────────────
+    db = SessionLocal()
+    try:
+        session_id = _session_id_from_request(request)
+        if not session_id:
+            raise HTTPException(status_code=401, detail="Non connecté")
+        user = _resolve_user_from_session(session_id, db)
+        if user is None:
+            raise HTTPException(status_code=401, detail="Session expirée")
+        if not user.is_admin:
+            logger.warning(f"[SSE] Accès refusé | user_id={user.id}")
+            raise HTTPException(status_code=403, detail="Accès refusé")
+    finally:
+        # Fermeture garantie que l'auth réussisse ou échoue
+        db.close()
+
+    # ── Stream SSE (plus aucune connexion DB active) ───────────────────────────
     from app.services.sse_manager import subscribe, event_stream
 
     client_id, queue = await subscribe()
@@ -1510,8 +1531,5 @@ async def sse_admin_stream(
             "Cache-Control":     "no-cache",
             "X-Accel-Buffering": "no",
             "Connection":        "keep-alive",
-            # Ne pas forcer Access-Control-Allow-Origin ici :
-            # le CORSMiddleware de main.py gère déjà les headers CORS
-            # avec l'origine exacte du client (requis pour les credentials).
         },
     )
