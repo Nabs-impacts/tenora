@@ -133,12 +133,33 @@ export default function Home() {
   return (
     <div className="overflow-hidden">
       {/* ========== HERO ========== */}
-      <section className="relative bg-gradient-hero border-b-2 border-border">
-        <div className="absolute inset-0 bg-grid opacity-[0.07] pointer-events-none" aria-hidden />
+      <section className="relative bg-background border-b-2 border-border overflow-hidden">
+        {/* Pattern PlayStation symbols */}
+        <div className="absolute inset-0 pointer-events-none select-none" aria-hidden>
+          <svg
+            className="absolute inset-0 w-full h-full opacity-[0.045]"
+            xmlns="http://www.w3.org/2000/svg"
+          >
+            <defs>
+              <pattern id="ps-pattern" x="0" y="0" width="80" height="80" patternUnits="userSpaceOnUse">
+                {/* ○ — cercle */}
+                <circle cx="20" cy="20" r="9" fill="none" stroke="currentColor" strokeWidth="2.5" />
+                {/* × — croix */}
+                <line x1="53" y1="8" x2="67" y2="32" stroke="currentColor" strokeWidth="2.5" />
+                <line x1="67" y1="8" x2="53" y2="32" stroke="currentColor" strokeWidth="2.5" />
+                {/* △ — triangle */}
+                <polygon points="20,48 10,68 30,68" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinejoin="round" />
+                {/* □ — carré */}
+                <rect x="54" y="50" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2.5" />
+              </pattern>
+            </defs>
+            <rect width="100%" height="100%" fill="url(#ps-pattern)" className="text-foreground" />
+          </svg>
+        </div>
         <div className="container-app relative pt-10 pb-16 md:pt-20 md:pb-24">
           <div className="flex items-center gap-3 mb-8 animate-fade-in">
             <div className="inline-flex items-center gap-2 border-2 border-border bg-card px-3 py-1.5">
-              <span className="size-2 bg-primary rounded-full animate-pulse" />
+              <span className="size-2 bg-primary animate-pulse" />
               <span className="text-[10px] font-bold uppercase tracking-widest text-foreground">
                 Système en ligne · Niamey
               </span>
@@ -151,7 +172,7 @@ export default function Home() {
           <h1 className="font-display font-bold text-[clamp(2.25rem,10vw,8rem)] leading-[0.88] uppercase text-balance tracking-tight max-w-6xl animate-fade-up">
             Passez en mode
             <br />
-            <span className="text-transparent bg-clip-text bg-gradient-primary">God Tier.</span>
+            <span className="text-primary">God Tier.</span>
           </h1>
 
           <div className="mt-10 flex flex-col md:flex-row md:items-end md:justify-between gap-8 animate-fade-up" style={{ animationDelay: "120ms" }}>
@@ -197,8 +218,8 @@ export default function Home() {
       </section>
 
       {/* ========== TICKER ========== */}
-      <div className="border-b-2 border-border bg-card overflow-hidden py-4 flex relative">
-        <div className="flex gap-12 items-center font-display text-2xl md:text-3xl uppercase text-muted-foreground whitespace-nowrap px-8 animate-marquee w-max">
+      <div className="border-b-2 border-border bg-card overflow-hidden py-3 md:py-4 flex relative">
+        <div className="flex gap-8 md:gap-12 items-center font-display text-lg md:text-3xl uppercase text-muted-foreground whitespace-nowrap px-6 md:px-8 animate-marquee w-max">
           {[...tickerItems, ...tickerItems].map((t, i) => (
             <span key={i} className="flex items-center gap-12">
               <span className="text-foreground">{t}</span>
@@ -220,7 +241,7 @@ export default function Home() {
           </Link>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-12 gap-5 auto-rows-[220px] md:auto-rows-[250px]">
+        <div className="grid grid-cols-1 md:grid-cols-12 gap-5 md:auto-rows-[250px]">
           {services.map((s, i) => {
             const Icon = s.icon;
             const a = accentMap[s.accent];
@@ -374,8 +395,8 @@ export default function Home() {
         <div className="mb-12">
           <p className="text-[10px] font-bold uppercase tracking-widest text-secondary mb-2 font-mono">// 05 — Raisons</p>
           <h2 className="font-display text-5xl md:text-7xl font-bold uppercase leading-none">
-            Pas d'arnaque.<br />
-            <span className="text-transparent bg-clip-text bg-gradient-primary">Que du concret.</span>
+            Pas d&apos;arnaque.<br />
+            <span className="text-primary">Que du concret.</span>
           </h2>
         </div>
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-px bg-border border-2 border-border">
@@ -388,6 +409,90 @@ export default function Home() {
               <p className="text-sm text-muted-foreground leading-relaxed">{w.desc}</p>
             </div>
           ))}
+        </div>
+      </section>
+
+      {/* ========== WHATSAPP COMMUNITY ========== */}
+      <section className="border-y-2 border-border bg-card">
+        <div className="container-app py-16 md:py-24">
+          <div className="grid md:grid-cols-2 gap-10 md:gap-16 items-center">
+            {/* Texte */}
+            <div>
+              <p className="text-[10px] font-bold uppercase tracking-widest text-secondary mb-2 font-mono">// Communauté</p>
+              <h2 className="font-display text-5xl md:text-7xl font-bold uppercase leading-[0.88] mb-6">
+                Sois le premier<br />
+                <span className="text-primary">informé.</span>
+              </h2>
+              <p className="text-base md:text-lg text-muted-foreground leading-relaxed mb-8 max-w-md">
+                Rejoins notre groupe WhatsApp et reçois en avant-première les promos, réductions,
+                nouveaux produits et offres exclusives. Réservé aux membres de la communauté Tenora.
+              </p>
+              <ul className="space-y-3 mb-10">
+                {[
+                  "Promos flash réservées au groupe",
+                  "Nouveaux produits en avant-première",
+                  "Codes de réduction exclusifs",
+                  "Annonces et actualités Tenora",
+                ].map((item) => (
+                  <li key={item} className="flex items-center gap-3 text-sm font-medium">
+                    <span className="size-5 shrink-0 border-2 border-primary bg-primary/10 text-primary flex items-center justify-center">
+                      <svg viewBox="0 0 12 10" className="size-3" fill="none">
+                        <polyline points="1,5 4,8 11,1" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+                      </svg>
+                    </span>
+                    {item}
+                  </li>
+                ))}
+              </ul>
+              <a
+                href="https://chat.whatsapp.com/D8YXvX3KgunBLEh3l8lGCq?s=cl&p=a&ilr=2"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-3 bg-[#25D366] text-white border-2 border-[#25D366] hover:bg-transparent hover:text-[#25D366] px-5 py-3 md:px-7 md:py-4 font-display font-bold text-lg md:text-xl uppercase tracking-wider transition-colors brut-btn-shadow w-full sm:w-auto justify-center sm:justify-start"
+              >
+                {/* WhatsApp icon */}
+                <svg viewBox="0 0 24 24" className="size-5 shrink-0 fill-current" xmlns="http://www.w3.org/2000/svg">
+                  <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51a12.8 12.8 0 0 0-.57-.01c-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 0 1-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 0 1-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 0 1 2.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0 0 12.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 0 0 5.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 0 0-3.48-8.413Z" />
+                </svg>
+                Rejoindre le groupe
+              </a>
+            </div>
+
+            {/* Visual bloc */}
+            <div className="relative hidden md:flex flex-col gap-4">
+              {/* Carte principale */}
+              <div className="border-2 border-border bg-background p-6 brut-card">
+                <div className="flex items-center gap-4 mb-5">
+                  <div className="size-12 bg-[#25D366] flex items-center justify-center shrink-0">
+                    <svg viewBox="0 0 24 24" className="size-6 fill-white" xmlns="http://www.w3.org/2000/svg">
+                      <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51a12.8 12.8 0 0 0-.57-.01c-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 0 1-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 0 1-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 0 1 2.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0 0 12.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 0 0 5.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 0 0-3.48-8.413Z" />
+                    </svg>
+                  </div>
+                  <div>
+                    <p className="font-display font-bold text-lg uppercase leading-none">Tenora Community</p>
+                    <p className="text-xs text-muted-foreground mt-1 font-mono">Groupe WhatsApp officiel</p>
+                  </div>
+                  <span className="ml-auto inline-flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-widest border-2 border-[#25D366]/40 bg-[#25D366]/10 text-[#25D366] px-2 py-0.5">
+                    <span className="size-1.5 bg-[#25D366] animate-pulse" />
+                    Actif
+                  </span>
+                </div>
+                {/* Faux messages */}
+                <div className="space-y-3">
+                  {[
+                    { from: "Tenora", msg: "PROMO FLASH — Diamants Free Fire -20% ce soir seulement", special: true },
+                    { from: "@kayz227", msg: "Recu en 2 min top merci" },
+                    { from: "Tenora", msg: "Nouveau : Abonnements Canva Pro disponibles", special: true },
+                  ].map((m, i) => (
+                    <div key={i} className={`flex flex-col gap-0.5 text-sm px-3 py-2 border-l-2 ${m.special ? "border-primary bg-primary/5" : "border-border bg-muted/30"}`}>
+                      <span className={`text-[10px] font-bold uppercase tracking-widest font-mono ${m.special ? "text-primary" : "text-muted-foreground"}`}>{m.from}</span>
+                      <span className="text-xs leading-relaxed">{m.msg}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+          </div>
         </div>
       </section>
 
@@ -406,9 +511,9 @@ export default function Home() {
               </p>
             </div>
             <div className="flex flex-col sm:flex-row md:flex-col gap-4 md:items-end">
-              <Button asChild size="lg" className="bg-background text-foreground hover:bg-background border-2 border-background hover-shift font-display uppercase tracking-wider text-2xl h-14 px-8">
+              <Button asChild size="lg" className="bg-background text-foreground hover:bg-background border-2 border-background hover-shift font-display uppercase tracking-wider text-xl md:text-2xl h-12 md:h-14 px-6 md:px-8 w-full sm:w-auto">
                 <Link to="/boutique">
-                  Ouvrir la boutique <ArrowRight className="size-5" />
+                  Ouvrir la boutique <ArrowRight className="size-5 shrink-0" />
                 </Link>
               </Button>
               {wa && (
@@ -416,7 +521,7 @@ export default function Home() {
                   href={waUrl}
                   target="_blank"
                   rel="noopener"
-                  className="inline-flex items-center justify-center gap-2 px-6 py-3 border-2 border-primary-foreground/30 hover:border-primary-foreground text-sm font-bold uppercase tracking-widest transition-colors"
+                  className="inline-flex items-center justify-center gap-2 px-5 py-3 border-2 border-primary-foreground/30 hover:border-primary-foreground text-sm font-bold uppercase tracking-widest transition-colors w-full sm:w-auto min-h-[44px]"
                 >
                   <MessageCircle className="size-4" /> Plutôt sur WhatsApp
                 </a>

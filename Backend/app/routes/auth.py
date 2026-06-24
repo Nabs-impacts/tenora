@@ -10,7 +10,8 @@ from sqlalchemy.orm import Session
 
 from app.config import settings
 from app.database import get_db
-from app.dependencies import get_current_user, _session_id_from_request
+from app.dependencies import get_current_user, _session_id_from_request, ADMIN_SESSION_TTL_HOURS, USER_SESSION_TTL_DAYS
+from app.services.brute_force import is_blocked, record_failed_attempt, reset_attempts
 from app.models.otp import OTPCode
 from app.models.session import Session as SessionModel
 from app.models.user import User
@@ -150,12 +151,11 @@ def login(data: UserLogin, response: Response, request: Request, db: Session = D
         pass
 
     if user.is_admin:
-        session_duration = timedelta(days=7)
-        cookie_max_age   = 7 * 24 * 60 * 60
+        session_duration = timedelta(hours=ADMIN_SESSION_TTL_HOURS)
+        cookie_max_age   = ADMIN_SESSION_TTL_HOURS * 60 * 60
     else:
-        session_duration = timedelta(days=7)
-        cookie_max_age   = 7 * 24 * 60 * 60
-
+        session_duration = timedelta(days=USER_SESSION_TTL_DAYS)
+        cookie_max_age   = USER_SESSION_TTL_DAYS * 24 * 60 * 60
     session_id = secrets.token_hex(32)
     session    = SessionModel(
         id         = session_id,
@@ -217,15 +217,15 @@ def me(request: Request, response: Response, db: Session = Depends(get_db)):
         db.commit()
         raise HTTPException(status_code=401, detail="Compte introuvable. Veuillez vous reconnecter.")
 
-    cookie_max_age = 7 * 24 * 60 * 60
-
     # ─── Optimisation DB : on ne renouvelle la session que si elle expire dans
-    # moins de 24h. Évite un UPDATE inutile à chaque vérification d'auth. ──────
-    time_left = (session.expires_at - datetime.utcnow()).total_seconds()
-    if time_left < 86400:
-        session.expires_at = datetime.utcnow() + timedelta(seconds=cookie_max_age)
-        db.commit()
-        _set_session_cookie(response, session_id, cookie_max_age)
+    # moins de 24h. Pas de "sliding window" (renouvellement) pour les admins. ───
+    if not user.is_admin:
+        cookie_max_age = USER_SESSION_TTL_DAYS * 24 * 60 * 60
+        time_left = (session.expires_at - datetime.utcnow()).total_seconds()
+        if time_left < 86400:
+            session.expires_at = datetime.utcnow() + timedelta(seconds=cookie_max_age)
+            db.commit()
+            _set_session_cookie(response, session_id, cookie_max_age)
 
     logger.info(f"Accès /me | user_id={user.id} | email={user.email}")
     return _user_session_payload(user, session_id)

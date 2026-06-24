@@ -10,7 +10,7 @@ from app.models.user import User
 
 
 USER_SESSION_TTL_DAYS = 7
-ADMIN_SESSION_TTL_HOURS = 24 * 7
+ADMIN_SESSION_TTL_HOURS = 5  # session admin courte — pas de sliding window
 
 
 def _session_id_from_request(request: Request) -> str | None:
